@@ -59,21 +59,25 @@ A comparação abaixo é preliminar e considera a adequação das alternativas a
 ## 💡 Solução Proposta
 
 ### 1. Descrição da Solução
-O SICOMAT é um sistema web que digitaliza o controle de materiais do serviço de dia, substituindo os registros em caderno por um histórico consultável. O modelo prevê três perfis: **Administrador do sistema**, que cadastra administradores do estoque; **Administrador do estoque**, que gerencia os materiais e as unidades físicas; e **Operador do estoque**, que registra empenhos, devoluções e trocas, sem alterar o cadastro de itens. Cada movimentação registra a unidade física, a data e a hora, o Operador do estoque responsável pelo registro e a pessoa ou equipe que recebeu ou devolveu o material. Um painel mostra a situação atual dos itens e as pendências de devolução.
+O SICOMAT é um sistema web que digitaliza o controle de materiais do serviço de dia, substituindo os registros em caderno por um histórico consultável. O modelo prevê três perfis: **Administrador do sistema**, uma conta única criada na carga inicial e que não pode ser inativada, responsável por cadastrar administradores e operadores do estoque; **Administrador do estoque**, que gerencia os materiais e as unidades físicas; e **Operador do estoque**, que registra empenhos, devoluções e trocas sem alterar o cadastro de itens. Cada movimentação registra a unidade física, a data e a hora, o operador que realizou a ação e a pessoa ou equipe que recebeu ou devolveu o material. Um painel mostra a situação dos itens e as pendências de devolução.
 
 | Perfil | Responsabilidade principal |
 |---|---|
-| Administrador do sistema | Cadastrar usuários com perfil de administrador do estoque. |
+| Administrador do sistema | Conta única criada na carga inicial; cadastrar administradores e operadores do estoque; não pode ser inativada. |
 | Administrador do estoque | Cadastrar, editar e inativar materiais e unidades físicas. |
 | Operador do estoque | Registrar empenhos, devoluções e trocas; consultar a situação dos itens. |
 
-O procedimento para criação das contas de operador será definido durante o detalhamento da autenticação e dos perfis de acesso.
+A substituição da conta única do administrador do sistema não é feita pela aplicação: deve ser realizada na carga inicial ou diretamente no banco de dados.
 
 ### 2. Funcionalidades Principais (MVP)
 
 - [ ] **Controle de acesso e perfis**
-  - Descrição: autenticar usuários e separar as permissões do administrador do sistema, do administrador do estoque e do operador.
+  - Descrição: autenticar usuários e separar as permissões do administrador do sistema, do administrador do estoque e do operador. O administrador do sistema é uma conta única criada na carga inicial, não pode ser inativada e cadastra os dois perfis de estoque. Após cinco falhas de autenticação em cinco minutos, a credencial fica bloqueada por cinco minutos e é liberada automaticamente.
   - Valor para usuário: limita cada ação à responsabilidade correspondente.
+
+- [ ] **Autenticação facial do recebedor** (regra do MVP)
+  - Descrição: exigir cadastro facial com consentimento e confirmação facial do recebedor. Se a facial não puder ser concluída, o PIN pode ser usado como exceção, com justificativa registrada.
+  - Valor para usuário: confirma a entrega mantendo um procedimento alternativo rastreável.
 
 - [ ] **Cadastro de materiais e unidades físicas** (Administrador do estoque)
   - Descrição: cadastrar e editar tipos de materiais e suas unidades físicas identificadas por patrimônio ou outro identificador; inativar registros quando necessário, preservando o histórico.
@@ -128,7 +132,7 @@ O procedimento para criação das contas de operador será definido durante o de
 
 ### 3. Requisitos Não-Funcionais
 - **Performance:** buscar resposta de até 2 segundos para as operações principais no ambiente de demonstração, sob condições de teste documentadas.
-- **Segurança:** exigir autenticação, armazenar senhas com hash e aplicar autorização por perfil; não incluir credenciais, dados pessoais reais ou identificadores operacionais no repositório público.
+- **Segurança:** exigir autenticação, armazenar senhas e PINs com hash e aplicar autorização por perfil. Após cinco falhas em cinco minutos, bloquear temporariamente a credencial por cinco minutos, com desbloqueio automático. A facial é a regra do MVP para autenticar o recebedor; o PIN é uma exceção justificada. O cadastro facial requer consentimento e armazena o template, não a foto original. Não incluir credenciais, dados pessoais reais ou identificadores operacionais no repositório público.
 - **Rastreabilidade:** registrar autor, data e hora e os itens envolvidos em cada empenho, devolução e substituição.
 - **Usabilidade:** oferecer uma interface simples, com poucos passos para as operações frequentes do operador.
 - **Escalabilidade:** atender ao volume previsto para uma companhia, com dezenas de itens e múltiplos registros diários.
@@ -145,7 +149,7 @@ O procedimento para criação das contas de operador será definido durante o de
 - [x] Configurar repositório GitHub
 - [x] Definir estrutura de pastas
 - [ ] Configurar ambiente de desenvolvimento (Java + Spring Boot + PostgreSQL)
-- [ ] Definir os três perfis, as permissões e quem poderá cadastrar cada tipo de usuário
+- [ ] Definir os três perfis, as permissões, a conta única inicial do administrador do sistema e os tipos de usuário que ele poderá cadastrar
 - [ ] Criar wireframes das telas do administrador do sistema, administrador do estoque e operador
 - [ ] Definir o modelo de dados (Material, ItemMaterial, Usuario, Equipe, Empenho e Devolucao)
 
@@ -216,7 +220,7 @@ O procedimento para criação das contas de operador será definido durante o de
 
 **Administrador do sistema:**
 1. Login no sistema
-2. Cadastra usuários com perfil de administrador do estoque
+2. Cadastra administradores e operadores do estoque
 
 **Administrador do estoque:**
 1. Login no sistema
@@ -230,7 +234,7 @@ O procedimento para criação das contas de operador será definido durante o de
 4. Em caso de substituição, registra a devolução do item antigo e o empenho do substituto
 5. Consulta o painel para conferir itens disponíveis e pendências antes da passagem de turno
 
-Em cada movimentação, o sistema distingue o operador autenticado que registra a ação da pessoa ou equipe que recebe ou devolve os materiais. A forma de criação das contas de operador será definida antes da implementação dos perfis.
+O operador do turno atual pode continuar, confirmar ou cancelar empenhos e registrar devoluções do mesmo estoque, mesmo quando outro operador iniciou o fluxo. O sistema mantém o registro do criador, do operador que realizou a ação e da pessoa que efetivamente devolveu os itens. Um recebedor inativo não pode iniciar ou confirmar novos empenhos, mas pode cancelar um pendente ou devolver itens do próprio empenho. A substituição do administrador do sistema exige alteração na carga inicial ou diretamente no banco de dados.
 
 ### 2. Wireframes/Protótipos
 `docs/wireframes/` 
@@ -245,7 +249,7 @@ Em cada movimentação, o sistema distingue o operador autenticado que registra 
 
 ## 🔒 Considerações de Segurança
 
-- A autenticação será obrigatória, com senhas armazenadas por meio de hash seguro.
+- A autenticação será obrigatória, com senhas e PINs armazenados por meio de hash seguro; o acesso do recebedor exige cadastro facial consentido, com PIN como exceção justificada.
 - A autorização será aplicada de acordo com os três perfis. O operador não poderá cadastrar, editar ou inativar materiais e unidades físicas.
 - As consultas ao banco serão parametrizadas e os dados recebidos serão validados.
 - O ambiente de produção usará HTTPS, caso o sistema seja hospedado publicamente.

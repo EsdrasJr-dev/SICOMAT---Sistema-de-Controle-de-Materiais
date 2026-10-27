@@ -18,17 +18,21 @@ O SICOMAT tem como objetivo centralizar o cadastro dos materiais e o controle de
 
 | Perfil | Responsabilidades |
 | --- | --- |
-| Administrador do sistema | Cadastra os usuários que terão o perfil de administrador do estoque. |
+| Administrador do sistema | Conta única criada na carga inicial; cadastra administradores e operadores do estoque; não pode ser inativada. |
 | Administrador do estoque | Cadastra, edita e inativa materiais e itens físicos. |
 | Operador do estoque | Registra empenhos, devoluções e trocas, e acompanha a situação dos itens. Não pode cadastrar, editar ou inativar materiais e itens. |
 
+A conta única do administrador do sistema não pode ser substituída pela aplicação. Se for necessário trocá-la, a alteração deve ser feita na carga inicial ou diretamente no banco de dados.
+
 ## ⚙️ Funcionalidades previstas
 
-- Cadastro de administradores do estoque pelo administrador do sistema.
+- Cadastro de administradores e operadores do estoque pelo administrador do sistema.
 - Cadastro, edição e inativação de materiais e itens físicos pelo administrador do estoque.
 - Registro de empenho de itens para uma equipe pelo operador do estoque, com identificação dos responsáveis e da movimentação.
 - Registro de devoluções totais ou parciais, inclusive quando ocorrem em horários diferentes.
 - Registro de trocas de itens durante o turno.
+- Autenticação facial consentida do recebedor como regra do MVP; PIN como exceção quando a facial não puder ser concluída, com justificativa registrada.
+- Bloqueio temporário após cinco falhas de senha ou PIN em cinco minutos; a credencial é liberada automaticamente após cinco minutos.
 - Painel de conferência com itens disponíveis, empenhados e ainda não devolvidos.
 - Histórico das movimentações para consulta e apoio a conferências e auditorias.
 
