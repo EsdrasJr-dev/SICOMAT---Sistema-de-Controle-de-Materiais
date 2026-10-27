@@ -34,28 +34,30 @@ public final class CodificadorSenha {
     }
 
     public static boolean verificar(String senha, String hashArmazenado) {
-        if (senha == null || hashArmazenado == null) {
-            return false;
-        }
+        if (senha == null || hashArmazenado == null) return false;
+        DadosHash dados = interpretar(hashArmazenado);
+        if (dados == null) return false;
+        byte[] hashRecebido = derivar(senha.toCharArray(), dados.salt, dados.iteracoes);
+        return MessageDigest.isEqual(dados.hash, hashRecebido);
+    }
 
+    /** Valida o formato armazenado sem comparar com uma senha. */
+    public static boolean formatoValido(String hashArmazenado) {
+        return hashArmazenado != null && interpretar(hashArmazenado) != null;
+    }
+
+    private static DadosHash interpretar(String hashArmazenado) {
         try {
             String[] partes = hashArmazenado.split("\\$", -1);
-            if (partes.length != 4 || !PREFIXO.equals(partes[0])) {
-                return false;
-            }
+            if (partes.length != 4 || !PREFIXO.equals(partes[0])) return null;
             int iteracoes = Integer.parseInt(partes[1]);
-            if (iteracoes < ITERACOES_MINIMAS || iteracoes > ITERACOES_MAXIMAS) {
-                return false;
-            }
+            if (iteracoes < ITERACOES_MINIMAS || iteracoes > ITERACOES_MAXIMAS) return null;
             byte[] salt = Base64.getDecoder().decode(partes[2]);
-            byte[] hashEsperado = Base64.getDecoder().decode(partes[3]);
-            if (salt.length < 16 || hashEsperado.length != TAMANHO_HASH_BITS / 8) {
-                return false;
-            }
-            byte[] hashRecebido = derivar(senha.toCharArray(), salt, iteracoes);
-            return MessageDigest.isEqual(hashEsperado, hashRecebido);
+            byte[] hash = Base64.getDecoder().decode(partes[3]);
+            if (salt.length < TAMANHO_SALT || hash.length != TAMANHO_HASH_BITS / 8) return null;
+            return new DadosHash(iteracoes, salt, hash);
         } catch (IllegalArgumentException ex) {
-            return false;
+            return null;
         }
     }
 
@@ -78,5 +80,16 @@ public final class CodificadorSenha {
             Arrays.fill(senha, '\0');
         }
     }
-}
 
+    private static final class DadosHash {
+        private final int iteracoes;
+        private final byte[] salt;
+        private final byte[] hash;
+
+        private DadosHash(int iteracoes, byte[] salt, byte[] hash) {
+            this.iteracoes = iteracoes;
+            this.salt = salt;
+            this.hash = hash;
+        }
+    }
+}

@@ -21,8 +21,8 @@ public class Devolucao extends Movimentacao {
                      List<ItemDevolucao> itens, String observacao) {
         super(operador, observacao);
         this.empenho = Objects.requireNonNull(empenho, "O empenho original é obrigatório.");
-        this.devolvidoPor = Objects.requireNonNull(devolvidoPor, "O recebedor é obrigatório.");
-        if (devolvidoPor != empenho.getRecebedor()) throw new IllegalArgumentException("A devolução deve identificar o recebedor do empenho original.");
+        this.devolvidoPor = Objects.requireNonNull(devolvidoPor, "A pessoa que entregou os itens é obrigatória.");
+        operador.validarAcesso(empenho);
         if (itens == null || itens.isEmpty()) throw new IllegalArgumentException("A devolução precisa conter ao menos um item.");
         Set<ItemEmpenho> unicos = Collections.newSetFromMap(new IdentityHashMap<>());
         List<ItemDevolucao> copia = new ArrayList<>();
@@ -44,7 +44,9 @@ public class Devolucao extends Movimentacao {
         synchronized (empenho) {
             if (registrada) throw new IllegalStateException("Esta devolução já foi registrada.");
             if (!empenho.emAberto()) throw new IllegalStateException("O empenho não possui itens aguardando devolução.");
-            if (!devolvidoPor.isAtivo()) throw new IllegalStateException("O recebedor está inativo.");
+            if (!devolvidoPor.isAtivo() && devolvidoPor != empenho.getRecebedor()) {
+                throw new IllegalStateException("Uma pessoa inativa só pode devolver itens do próprio empenho.");
+            }
             for (ItemDevolucao item : itens) item.validarRegistro();
             for (ItemDevolucao item : itens) item.registrar();
             parcial = !empenho.getItensPendentes().isEmpty();
@@ -57,6 +59,3 @@ public class Devolucao extends Movimentacao {
         return registrada && parcial;
     }
 }
-
-
-

@@ -74,8 +74,10 @@ public class Estoque {
     public synchronized boolean contem(Material material) { return material != null && materiais.contains(material); }
 
     public synchronized boolean contem(ItemMaterial item) {
-        return item != null && item.getMaterial() != null && materiais.contains(item.getMaterial())
-                && item.getMaterial().getItens().contains(item);
+        if (item == null) return false;
+        for (Material material : materiais) {
+            if (material.getItens().contains(item)) return true;
+        }
+        return false;
     }
 }
-

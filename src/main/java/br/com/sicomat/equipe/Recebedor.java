@@ -1,6 +1,7 @@
 package br.com.sicomat.equipe;
 
 import br.com.sicomat.seguranca.CodificadorSenha;
+import br.com.sicomat.seguranca.ControleTentativasAutenticacao;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 
@@ -9,6 +10,7 @@ public class Recebedor {
     private final String nome;
     private final String matricula;
     private String pinHash;
+    private final ControleTentativasAutenticacao tentativasPin = new ControleTentativasAutenticacao();
     private byte[] templateFacial;
     private LocalDateTime consentimentoEm;
     private boolean ativo = true;
@@ -16,7 +18,10 @@ public class Recebedor {
     public Recebedor(String nome, String matricula, String pinHash) {
         this.nome = textoObrigatorio(nome, "nome");
         this.matricula = textoObrigatorio(matricula, "matrícula");
-        this.pinHash = textoObrigatorio(pinHash, "hash do PIN");
+        if (!CodificadorSenha.formatoValido(pinHash)) {
+            throw new IllegalArgumentException("O PIN deve ser armazenado em formato de hash PBKDF2 válido.");
+        }
+        this.pinHash = pinHash;
     }
 
     public String getNome() { return nome; }
@@ -26,7 +31,14 @@ public class Recebedor {
     public synchronized boolean possuiFaceCadastrada() { return templateFacial != null && templateFacial.length > 0; }
 
     public synchronized boolean verificarPin(String pin) {
-        return ativo && CodificadorSenha.verificar(pin, pinHash);
+        if (!ativo) return false;
+        tentativasPin.exigirTentativaPermitida();
+        if (CodificadorSenha.verificar(pin, pinHash)) {
+            tentativasPin.registrarSucesso();
+            return true;
+        }
+        tentativasPin.registrarFalha();
+        return false;
     }
 
     /** Chamado pelo provedor biométrico após gerar um template, nunca com a foto original. */
@@ -45,6 +57,7 @@ public class Recebedor {
     public synchronized void redefinirPin(String novoPin) {
         if (novoPin == null || novoPin.isBlank()) throw new IllegalArgumentException("O PIN não pode ficar vazio.");
         pinHash = CodificadorSenha.codificar(novoPin);
+        tentativasPin.redefinir();
     }
 
     public synchronized void inativar() { ativo = false; }
@@ -55,4 +68,3 @@ public class Recebedor {
         return valor.trim();
     }
 }
-

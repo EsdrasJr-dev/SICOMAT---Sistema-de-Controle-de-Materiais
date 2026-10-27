@@ -42,13 +42,6 @@ public class AdministradorEstoque extends Usuario {
         estoque.adicionarMaterial(material);
     }
 
-    /** Valida um material já editado antes de confirmar a alteração no cadastro em memória. */
-    public void editarMaterial(Material material) {
-        exigirAtivo();
-        if (!estoque.contem(material)) throw new IllegalArgumentException("O material não pertence a este estoque.");
-        estoque.editarMaterial(material, material.getCodigo(), material.getNome());
-    }
-
     public void editarMaterial(Material material, String novoCodigo, String novoNome) {
         exigirAtivo();
         if (!estoque.contem(material)) throw new IllegalArgumentException("O material não pertence a este estoque.");
@@ -79,7 +72,9 @@ public class AdministradorEstoque extends Usuario {
         }
         if (verificadorFacial == null) throw new IllegalStateException("Configure um provedor de reconhecimento facial antes do cadastro biométrico.");
         verificadorFacial.cadastrar(recebedor, imagem);
-        if (!recebedor.possuiFaceCadastrada()) throw new IllegalStateException("O provedor não cadastrou o template facial do recebedor.");
+        if (!recebedor.possuiFaceCadastrada() || recebedor.getConsentimentoEm() == null) {
+            throw new IllegalStateException("O provedor precisa registrar o template facial e o consentimento do recebedor.");
+        }
         recebedores.add(recebedor);
     }
 
@@ -104,8 +99,3 @@ public class AdministradorEstoque extends Usuario {
     @Override public boolean podeGerenciarMaterial() { return true; }
     @Override public boolean podeRegistrarMovimentacao() { return false; }
 }
-
-
-
-
-

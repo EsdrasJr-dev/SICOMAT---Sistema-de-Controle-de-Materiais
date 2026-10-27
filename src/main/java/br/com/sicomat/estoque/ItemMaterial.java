@@ -9,6 +9,8 @@ public class ItemMaterial {
     private StatusItem status = StatusItem.DISPONIVEL;
     private Material material;
     private Empenho reservadoPor;
+    private Object tokenReserva;
+    private Object tokenMovimentacao;
 
     public ItemMaterial(String numeroPatrimonio) {
         if (numeroPatrimonio == null || numeroPatrimonio.isBlank()) throw new IllegalArgumentException("O patrimônio é obrigatório.");
@@ -25,51 +27,77 @@ public class ItemMaterial {
     public synchronized Material getMaterial() { return material; }
     public synchronized boolean estaEmpenhado() { return status == StatusItem.EMPENHADO; }
     public synchronized boolean isReservado() { return reservadoPor != null; }
-    public synchronized boolean reservaPertenceA(Empenho empenho) { return reservadoPor == empenho; }
+    public synchronized boolean reservaPertenceA(Empenho empenho, Object token) {
+        return reservadoPor == empenho && tokenReserva == token && token != null;
+    }
 
     public synchronized boolean estarDisponivel() {
         return status == StatusItem.DISPONIVEL && reservadoPor == null && (material == null || material.isAtivo());
     }
 
-    public synchronized void empenhar() {
-        if (!estarDisponivel()) throw new IllegalStateException("O item não está disponível para empenho.");
-        status = StatusItem.EMPENHADO;
-    }
-
-    public synchronized void reservar(Empenho empenho) {
+    /** O token é mantido privadamente por ItemEmpenho e impede alterações fora do fluxo do empenho. */
+    public synchronized void reservar(Empenho empenho, Object token) {
         Objects.requireNonNull(empenho, "O empenho é obrigatório.");
+        Objects.requireNonNull(token, "A autorização da linha do empenho é obrigatória.");
         if (!estarDisponivel()) throw new IllegalStateException("O item não está disponível para reserva.");
         reservadoPor = empenho;
+        tokenReserva = token;
     }
 
-    public synchronized void confirmarEmpenho(Empenho empenho) {
-        if (reservadoPor != empenho) throw new IllegalStateException("O item não está reservado por este empenho.");
-        if (material != null && !material.isAtivo()) throw new IllegalStateException("O material foi inativado antes da confirmação.");
+    public synchronized void confirmarEmpenho(Empenho empenho, Object token) {
+        if (reservadoPor != empenho || tokenReserva != token || token == null || status != StatusItem.DISPONIVEL) {
+            throw new IllegalStateException("O item não está reservado por este empenho.");
+        }
+        if (material == null || !material.isAtivo()) {
+            throw new IllegalStateException("O material foi inativado antes da confirmação.");
+        }
         status = StatusItem.EMPENHADO;
         reservadoPor = null;
+        tokenReserva = null;
+        tokenMovimentacao = token;
     }
 
-    public synchronized void liberarReserva(Empenho empenho) {
-        if (reservadoPor == empenho) reservadoPor = null;
+    /** Restaura uma reserva se uma confirmação com vários itens falhar no meio do processo. */
+    public synchronized void reverterConfirmacao(Empenho empenho, Object token) {
+        if (status != StatusItem.EMPENHADO || tokenMovimentacao != token || token == null) {
+            throw new IllegalStateException("Não é possível reverter o estado atual do item.");
+        }
+        status = StatusItem.DISPONIVEL;
+        reservadoPor = Objects.requireNonNull(empenho, "O empenho é obrigatório.");
+        tokenReserva = token;
+        tokenMovimentacao = null;
     }
 
-    public synchronized void devolver() { devolver(false); }
+    public synchronized void liberarReserva(Empenho empenho, Object token) {
+        if (reservadoPor == empenho && tokenReserva == token && token != null) {
+            reservadoPor = null;
+            tokenReserva = null;
+            if (material != null && !material.isAtivo() && status == StatusItem.DISPONIVEL) {
+                status = StatusItem.INATIVO;
+            }
+        }
+    }
 
-    public synchronized void devolver(boolean avariado) {
-        if (status != StatusItem.EMPENHADO) throw new IllegalStateException("Só é possível devolver um item empenhado.");
+    public synchronized void devolver(boolean avariado, Object token) {
+        if (status != StatusItem.EMPENHADO || tokenMovimentacao != token || token == null) {
+            throw new IllegalStateException("Só é possível devolver o item pelo empenho que o mantém registrado.");
+        }
         status = avariado ? StatusItem.AVARIADO
                 : (material != null && !material.isAtivo() ? StatusItem.INATIVO : StatusItem.DISPONIVEL);
+        tokenMovimentacao = null;
     }
 
-    public synchronized void marcarExtraviado() {
-        if (status != StatusItem.EMPENHADO) throw new IllegalStateException("Só é possível registrar extravio de item empenhado.");
+    public synchronized void marcarExtraviado(Object token) {
+        if (status != StatusItem.EMPENHADO || tokenMovimentacao != token || token == null) {
+            throw new IllegalStateException("Só é possível registrar extravio pelo empenho que mantém o item registrado.");
+        }
         status = StatusItem.EXTRAVIADO;
+        tokenMovimentacao = null;
     }
 
     public synchronized void marcarAvariado() {
-        if (reservadoPor != null) throw new IllegalStateException("Um item reservado não pode ser marcado como avariado.");
-        if (status != StatusItem.EMPENHADO && status != StatusItem.DISPONIVEL) {
-            throw new IllegalStateException("O item não pode ser marcado como avariado neste estado.");
+        if (reservadoPor != null || status != StatusItem.DISPONIVEL) {
+            throw new IllegalStateException("Só um item disponível pode ser marcado como avariado.");
         }
         status = StatusItem.AVARIADO;
     }
@@ -97,7 +125,3 @@ public class ItemMaterial {
         this.material = material;
     }
 }
-
-
-
-

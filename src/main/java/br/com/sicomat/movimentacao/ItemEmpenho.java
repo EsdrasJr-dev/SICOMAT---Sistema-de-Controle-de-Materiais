@@ -1,6 +1,7 @@
 package br.com.sicomat.movimentacao;
 
 import br.com.sicomat.estoque.ItemMaterial;
+import br.com.sicomat.estoque.Material;
 import br.com.sicomat.usuario.AdministradorEstoque;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -9,6 +10,7 @@ public class ItemEmpenho {
 
     private final Empenho empenho;
     private final ItemMaterial itemMaterial;
+    private final Object tokenEstado = new Object();
     private SituacaoItemEmpenho situacao;
     private LocalDateTime extraviadoEm;
     private AdministradorEstoque extravioRegistradoPor;
@@ -25,23 +27,35 @@ public class ItemEmpenho {
     public synchronized AdministradorEstoque getExtravioRegistradoPor() { return extravioRegistradoPor; }
     public synchronized boolean estaPendente() { return situacao == SituacaoItemEmpenho.EMPENHADO; }
 
+    synchronized void reservar() { itemMaterial.reservar(empenho, tokenEstado); }
+
+    synchronized void liberarReserva() { itemMaterial.liberarReserva(empenho, tokenEstado); }
+
     synchronized void validarConfirmacao() {
-        if (situacao != null || !itemMaterial.reservaPertenceA(empenho)) {
-            throw new IllegalStateException("O item não está reservado para este empenho pendente.");
+        Material material = itemMaterial.getMaterial();
+        if (situacao != null || !itemMaterial.reservaPertenceA(empenho, tokenEstado)
+                || material == null || !material.isAtivo()) {
+            throw new IllegalStateException("O item não está reservado em um material ativo para este empenho pendente.");
         }
     }
 
     synchronized void confirmar() {
         validarConfirmacao();
-        itemMaterial.confirmarEmpenho(empenho);
+        itemMaterial.confirmarEmpenho(empenho, tokenEstado);
         situacao = SituacaoItemEmpenho.EMPENHADO;
     }
 
-    public synchronized void marcarDevolvido() { marcarDevolvido(false); }
+    synchronized void reverterConfirmacao() {
+        if (situacao != SituacaoItemEmpenho.EMPENHADO) {
+            throw new IllegalStateException("O item não foi confirmado por esta operação.");
+        }
+        itemMaterial.reverterConfirmacao(empenho, tokenEstado);
+        situacao = null;
+    }
 
     synchronized void marcarDevolvido(boolean avariado) {
         exigirEmpenhado();
-        itemMaterial.devolver(avariado);
+        itemMaterial.devolver(avariado, tokenEstado);
         situacao = SituacaoItemEmpenho.DEVOLVIDO;
     }
 
@@ -50,14 +64,14 @@ public class ItemEmpenho {
         if (registradoPor == null || !registradoPor.isAtivo()) {
             throw new IllegalArgumentException("O extravio deve ser registrado por um administrador do estoque ativo.");
         }
-        itemMaterial.marcarExtraviado();
+        itemMaterial.marcarExtraviado(tokenEstado);
         situacao = SituacaoItemEmpenho.EXTRAVIADO;
         extraviadoEm = LocalDateTime.now();
         extravioRegistradoPor = registradoPor;
     }
 
     private void exigirEmpenhado() {
-        if (situacao != SituacaoItemEmpenho.EMPENHADO) {
+        if (situacao != SituacaoItemEmpenho.EMPENHADO || !itemMaterial.estaEmpenhado()) {
             throw new IllegalStateException("O item não está empenhado ou já foi encerrado.");
         }
     }
