@@ -44,9 +44,11 @@ Embora tenha surgido para atender ao serviço de dia da Polícia Militar, a prop
 
 | Área | Tecnologias |
 | --- | --- |
-| Backend | Java e Spring Boot |
-| Interface | Thymeleaf e Bootstrap |
-| Banco de dados | PostgreSQL |
+| Backend | Java 21, Spring Boot 3.5.16, API REST, Spring Security, Spring Data JPA e Flyway |
+| Interface | A interface Thymeleaf + Bootstrap permanece planejada; o backend expõe API REST |
+| Banco de dados | PostgreSQL 17 |
+
+A arquitetura e o escopo atual da integração estão descritos em [docs/arquitetura.md](docs/arquitetura.md).
 
 ## 📐 Diagrama de classes
 
@@ -68,8 +70,15 @@ Embora tenha surgido para atender ao serviço de dia da Polícia Militar, a prop
 
 ## 🚀 Como executar
 
-As instruções de instalação e execução serão adicionadas quando a configuração do projeto estiver definida.
+Requisitos: JDK 21 e Docker com Compose.
+
+1. Copie .env.example para .env e defina uma senha forte em SICOMAT_ADMIN_SENHA.
+2. Inicie o PostgreSQL: docker compose up -d database.
+3. Inicie a aplicação: .\mvnw.cmd spring-boot:run.
+4. Confira http://localhost:8080/api/v1/status.
+
+Na primeira inicialização, a aplicação cria a conta única de administrador do sistema a partir das variáveis SICOMAT_ADMIN_* do arquivo .env. Não use os valores de exemplo em ambientes compartilhados. As demais rotas exigem autenticação HTTP Basic com matrícula e senha.
 
 ## 📊 Status do projeto
 
-🔴 **Em planejamento**
+🟡 **Backend Spring Boot em implementação** — a base da API, autenticação e inventário está integrada; a persistência dos fluxos de movimentação, a interface e o provedor facial ainda serão implementados.
