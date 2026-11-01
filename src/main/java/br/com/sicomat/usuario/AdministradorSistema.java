@@ -45,13 +45,7 @@ public class AdministradorSistema extends Usuario {
         exigirAdministradorAtivo();
         exigirUsuarioCadastrado(usuario);
         if (usuario instanceof AdministradorSistema) {
-            long administradoresAtivos = usuarios.stream()
-                    .filter(AdministradorSistema.class::isInstance)
-                    .filter(Usuario::isAtivo)
-                    .count();
-            if (administradoresAtivos <= 1) {
-                throw new IllegalStateException("O último administrador do sistema ativo não pode ser inativado.");
-            }
+            throw new IllegalStateException("A conta única do administrador do sistema não pode ser inativada.");
         }
         usuario.inativar();
     }

@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.Objects;
 
 @Entity
 @Table(name = "item_material")
@@ -39,7 +40,8 @@ public class ItemMaterialJpaEntity {
     }
 
     public ItemMaterialJpaEntity(MaterialJpaEntity material, String numeroPatrimonio, StatusItem status) {
-        this.material = material;
+        this.material = Objects.requireNonNull(material, "O material é obrigatório.");
+        this.setor = material.getSetor();
         this.numeroPatrimonio = numeroPatrimonio;
         this.status = status;
     }
