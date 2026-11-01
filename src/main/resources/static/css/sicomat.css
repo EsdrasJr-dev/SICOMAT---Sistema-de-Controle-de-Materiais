@@ -1,0 +1,32 @@
+.navbar-nav .nav-link {
+    white-space: nowrap;
+}
+body {
+    min-height: 100vh;
+}
+#inicio-resumo .card {
+    border-left: 4px solid var(--bs-primary);
+}
+.table thead th {
+    font-weight: 600;
+    white-space: nowrap;
+}
+.table td .btn {
+    white-space: nowrap;
+}
+.nav-tabs .nav-link.active {
+    font-weight: 600;
+}
+@media print {
+    nav,
+    .btn,
+    .nav-tabs,
+    select,
+    #rel-tipo {
+        display: none !important;
+    }
+    body {
+        background: #fff !important;
+        color: #000 !important;
+    }
+}
