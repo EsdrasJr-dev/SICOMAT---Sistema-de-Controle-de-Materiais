@@ -30,6 +30,11 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("[data-go]").forEach(l => {
       l.classList.toggle("active", l.getAttribute("data-go") === nome);
     });
+
+    // Atualiza as telas toda vez que elas são abertas
+    if (nome === "gerenciar") {
+      atualizarGerenciar();
+    }
   }
 
   document.querySelectorAll("[data-go]").forEach(link => {
@@ -57,17 +62,17 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (login === "operador" && senha === "1234") {
-      logarUsuario("Vinicius Rodrigo", " (Operador)", false);
+      logarUsuario("Vinicius Rodrigo", " (Operador)", false, false);
     } else if (login === "admin" && senha === "1234") {
-      logarUsuario("Esdras Batista", " (Adm do Estoque)", false);
+      logarUsuario("Esdras Batista", " (Adm do Estoque)", false, true);
     } else if (login === "sistema" && senha === "1234") {
-      logarUsuario("Administrador do Sistema", " (Adm do Sistema)", true);
+      logarUsuario("Administrador do Sistema", " (Adm do Sistema)", true, false);
     } else {
       mensagemErro.textContent = "Usuário ou senha incorretos.";
     }
   }
 
-  function logarUsuario(nome, perfil, isAdminSistema) {
+  function logarUsuario(nome, perfil, isAdminSistema, isAdminEstoque) {
     telaLogin.hidden = true;
     telaSistema.hidden = false;
 
@@ -76,6 +81,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (inicioNome) inicioNome.textContent = nome;
 
     if (inicioAviso) inicioAviso.hidden = !isAdminSistema;
+
+    // O menu "Gerenciar Materiais" só aparece para o Adm do Estoque
+    const linkGerenciar = document.querySelector("[data-go='gerenciar']");
+    if (linkGerenciar) linkGerenciar.parentElement.hidden = !isAdminEstoque;
 
     mostrarTela("inicio");
   }
@@ -100,16 +109,18 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // ABAS (REGISTRAR MOVIMENTAÇÃO)
-  const botoesAbas = document.querySelectorAll("#tela-registrar .nav-tabs .nav-link");
-  const conteudosAbas = document.querySelectorAll("#tela-registrar .aba");
+  // ABAS Registrar Movimentação e Gerenciar Materiais
+  const todosBotoesAbas = document.querySelectorAll(".nav-tabs .nav-link");
 
-  botoesAbas.forEach(botao => {
+  todosBotoesAbas.forEach(botao => {
     botao.addEventListener("click", function () {
-      botoesAbas.forEach(b => b.classList.remove("active"));
+      const listaAbas = this.parentElement.parentElement;
+      const tela = listaAbas.parentElement;              
+
+      listaAbas.querySelectorAll(".nav-link").forEach(b => b.classList.remove("active"));
       this.classList.add("active");
 
-      conteudosAbas.forEach(aba => (aba.hidden = true));
+      tela.querySelectorAll(".aba").forEach(aba => (aba.hidden = true));
 
       const abaAlvo = document.getElementById(this.getAttribute("data-aba"));
       if (abaAlvo) abaAlvo.hidden = false;
@@ -296,7 +307,6 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
   }
-
   if (botaoGerar) botaoGerar.addEventListener("click", gerarRelatorio);
   if (botaoImprimir) botaoImprimir.addEventListener("click", function () { window.print(); });
 
@@ -307,14 +317,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!registrarMsg) return;
     registrarMsg.innerHTML = '<div class="alert alert-' + tipo + ' py-2 mb-0">' + escapar(texto) + "</div>";
   }
-
   function atualizarTelas() {
     salvarDados();
     preencherRecebedores();
     renderizarHistorico();
     if (tabelaRelatorio && tabelaRelatorio.innerHTML.trim() !== "") gerarRelatorio();
   }
-
   function registrarEmpenho() {
     const material = document.getElementById("emp-material").value.trim();
     const qtd = parseInt(document.getElementById("emp-qtd").value, 10);
@@ -324,7 +332,6 @@ document.addEventListener("DOMContentLoaded", function () {
       mostrarMensagem("Preencha material, quantidade e recebedor.", "warning");
       return;
     }
-
     movimentacoes.push({
       data: hojeISO(),
       tipo: "Empenho",
@@ -333,7 +340,6 @@ document.addEventListener("DOMContentLoaded", function () {
       recebedor: recebedor,
       status: "Registrado"
     });
-
     atualizarTelas();
     mostrarMensagem("Empenho registrado com sucesso.", "success");
 
@@ -341,7 +347,6 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("emp-qtd").value = "";
     document.getElementById("emp-recebedor").value = "";
   }
-
   function registrarDevolucao() {
     const material = document.getElementById("dev-material").value.trim();
     const qtd = parseInt(document.getElementById("dev-qtd").value, 10);
@@ -352,7 +357,6 @@ document.addEventListener("DOMContentLoaded", function () {
       mostrarMensagem("Preencha material, quantidade e recebedor.", "warning");
       return;
     }
-
     const emAberto = quantidadeEmAberto(recebedor, material);
     if (qtd > emAberto) {
       mostrarMensagem(
@@ -363,7 +367,6 @@ document.addEventListener("DOMContentLoaded", function () {
       );
       return;
     }
-
     movimentacoes.push({
       data: hojeISO(),
       tipo: "Devolução",
@@ -372,7 +375,6 @@ document.addEventListener("DOMContentLoaded", function () {
       recebedor: recebedor,
       status: condicao
     });
-
     atualizarTelas();
     mostrarMensagem("Devolução registrada com sucesso.", "success");
 
@@ -381,14 +383,372 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("dev-recebedor").value = "";
     document.getElementById("dev-condicao").value = "Bom estado";
   }
-
   const botaoEmpenho = document.querySelector("[data-action='registrar-empenho']");
   const botaoDevolucao = document.querySelector("[data-action='registrar-devolucao']");
   if (botaoEmpenho) botaoEmpenho.addEventListener("click", registrarEmpenho);
   if (botaoDevolucao) botaoDevolucao.addEventListener("click", registrarDevolucao);
 
+  // GERENCIAR MATERIAIS
+  const CH_MATERIAIS = "sicomat_materiais";
+  const CH_ITENS = "sicomat_itens";
+  const CH_RECEBEDORES = "sicomat_recebedores";
+
+  function lerLista(chave) {
+    try {
+      return JSON.parse(localStorage.getItem(chave)) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function gravarLista(chave, lista) {
+    try {
+      localStorage.setItem(chave, JSON.stringify(lista));
+    } catch (e) {
+      console.warn("Não foi possível salvar.");
+    }
+  }
+  const materiais = lerLista(CH_MATERIAIS);
+  const itens = lerLista(CH_ITENS);
+  const recebedores = lerLista(CH_RECEBEDORES);
+
+  // Funções auxiliares desta tela
+  function escaparAttr(texto) {
+    return escapar(String(texto)).replace(/"/g, "&quot;");
+  }
+  // tabela onde já é HTML pronto (para poder ter botões)
+  function montarTabelaGerenciar(tabela, titulos, linhas) {
+    let html = "<thead><tr>";
+    for (let i = 0; i < titulos.length; i++) {
+      html += "<th>" + titulos[i] + "</th>";
+    }
+    html += "</tr></thead><tbody>";
+
+    if (linhas.length === 0) {
+      html += '<tr><td colspan="' + titulos.length + '" class="text-center text-muted">Nenhum registro cadastrado.</td></tr>';
+    }
+    for (let j = 0; j < linhas.length; j++) {
+      html += "<tr>";
+      for (let k = 0; k < linhas[j].length; k++) {
+        html += "<td>" + linhas[j][k] + "</td>";
+      }
+      html += "</tr>";
+    }
+    tabela.innerHTML = html + "</tbody>";
+  }
+  // Cria um botão pequeno com a ação e o id que ele vai usar
+  function botaoAcao(texto, classe, acao, id) {
+    return '<button type="button" class="btn btn-sm ' + classe + ' me-1" data-acao="' + acao +
+      '" data-id="' + escaparAttr(id) + '">' + texto + "</button>";
+  }
+  function acharMaterial(codigo) {
+    for (let i = 0; i < materiais.length; i++) {
+      if (materiais[i].codigo === codigo) return materiais[i];
+    }
+    return null;
+  }
+  function nomeDoMaterial(codigo) {
+    const m = acharMaterial(codigo);
+    return m ? m.nome : "(material removido)";
+  }
+  // ABA MATERIAIS
+  const matCodigo = document.getElementById("mat-codigo");
+  const matNome = document.getElementById("mat-nome");
+  const matSecao = document.getElementById("mat-secao");
+  const matErro = document.getElementById("mat-erro");
+  const tabelaGerMateriais = document.getElementById("tabela-gerenciar-materiais");
+
+  let codigoEmEdicao = "";
+
+  function mostrarMateriais() {
+    if (!tabelaGerMateriais) return;
+
+    const linhas = [];
+    for (let i = 0; i < materiais.length; i++) {
+      const m = materiais[i];
+      const situacao = m.ativo ? "Ativo" : "Inativo";
+      const textoInativar = m.ativo ? "Inativar" : "Reativar";
+
+      linhas.push([
+        escapar(m.codigo),
+        escapar(m.nome),
+        escapar(m.secao),
+        situacao,
+        botaoAcao("Editar", "btn-outline-primary", "editar-material", m.codigo) +
+        botaoAcao(textoInativar, "btn-outline-secondary", "ativar-material", m.codigo)
+      ]);
+    }
+    montarTabelaGerenciar(tabelaGerMateriais, ["Código", "Material", "Seção", "Situação", "Ações"], linhas);
+  }
+  function salvarMaterial() {
+    matErro.textContent = "";
+
+    const codigo = matCodigo.value.trim();
+    const nome = matNome.value.trim();
+    const secao = matSecao.value.trim();
+
+    if (codigo === "" || nome === "" || secao === "") {
+      matErro.textContent = "Preencha código, nome e seção.";
+      return;
+    }
+    if (codigoEmEdicao !== "") {
+      // edita nome e ação
+      const m = acharMaterial(codigoEmEdicao);
+      if (m) {
+        m.nome = nome;
+        m.secao = secao;
+      }
+    } else {
+      // Não deixa repetir o código
+      if (acharMaterial(codigo)) {
+        matErro.textContent = "Já existe um material com esse código.";
+        return;
+      }
+      materiais.push({ codigo: codigo, nome: nome, secao: secao, ativo: true });
+    }
+    gravarLista(CH_MATERIAIS, materiais);
+
+    // Limpa o formulário
+    codigoEmEdicao = "";
+    matCodigo.value = "";
+    matCodigo.readOnly = false;
+    matNome.value = "";
+    matSecao.value = "";
+
+    atualizarGerenciar();
+  }
+  if (tabelaGerMateriais) {
+    tabelaGerMateriais.addEventListener("click", function (e) {
+      const acao = e.target.getAttribute("data-acao");
+      const codigo = e.target.getAttribute("data-id");
+      if (!acao) return;
+
+      const m = acharMaterial(codigo);
+      if (!m) return;
+
+      if (acao === "editar-material") {
+        // coloca osdados nos campos para editar
+        codigoEmEdicao = m.codigo;
+        matCodigo.value = m.codigo;
+        matCodigo.readOnly = true;
+        matNome.value = m.nome;
+        matSecao.value = m.secao;
+        matErro.textContent = "";
+        matNome.focus();
+      }
+      if (acao === "ativar-material") {
+        m.ativo = !m.ativo;
+        gravarLista(CH_MATERIAIS, materiais);
+        atualizarGerenciar();
+      }
+    });
+  }
+  const botaoSalvarMaterial = document.querySelector("[data-action='salvar-material']");
+  if (botaoSalvarMaterial) botaoSalvarMaterial.addEventListener("click", salvarMaterial);
+
+  // ABA ITENS 
+  const itemMaterial = document.getElementById("item-material");
+  const itemPatrimonio = document.getElementById("item-patrimonio");
+  const itemErro = document.getElementById("item-erro");
+  const tabelaGerItens = document.getElementById("tabela-gerenciar-itens");
+
+  // Preenche o select só com materiais ativos
+  function preencherSelectMateriais() {
+    if (!itemMaterial) return;
+
+    const selecionado = itemMaterial.value;
+    let html = "";
+
+    for (let i = 0; i < materiais.length; i++) {
+      if (materiais[i].ativo) {
+        html += '<option value="' + escaparAttr(materiais[i].codigo) + '">' +
+          escapar(materiais[i].codigo + " – " + materiais[i].nome) + "</option>";
+      }
+    }
+    if (html === "") {
+      html = '<option value="">Cadastre um material primeiro</option>';
+    }
+    itemMaterial.innerHTML = html;
+    if (selecionado !== "") itemMaterial.value = selecionado;
+  }
+  function mostrarItens() {
+    if (!tabelaGerItens) return;
+
+    const linhas = [];
+    for (let i = 0; i < itens.length; i++) {
+      const it = itens[i];
+      const situacao = it.ativo ? "Disponível" : "Inativo";
+      const textoBotao = it.ativo ? "Inativar" : "Liberar";
+
+      linhas.push([
+        escapar(it.patrimonio),
+        escapar(nomeDoMaterial(it.codigo)),
+        situacao,
+        botaoAcao(textoBotao, "btn-outline-secondary", "ativar-item", it.patrimonio)
+      ]);
+    }
+    montarTabelaGerenciar(tabelaGerItens, ["Patrimônio", "Material", "Situação", "Ações"], linhas);
+  }
+  function salvarItem() {
+    itemErro.textContent = "";
+
+    const codigo = itemMaterial.value;
+    const patrimonio = itemPatrimonio.value.trim();
+
+    if (codigo === "") {
+      itemErro.textContent = "Escolha um material (cadastre um na aba Materiais).";
+      return;
+    }
+    if (patrimonio === "") {
+      itemErro.textContent = "Informe o número de patrimônio.";
+      return;
+    }
+    // Não deixa repetir o patrimônio
+    for (let i = 0; i < itens.length; i++) {
+      if (itens[i].patrimonio === patrimonio) {
+        itemErro.textContent = "Esse patrimônio já está cadastrado.";
+        return;
+      }
+    }
+    itens.push({ patrimonio: patrimonio, codigo: codigo, ativo: true });
+    gravarLista(CH_ITENS, itens);
+
+    itemPatrimonio.value = "";
+    atualizarGerenciar();
+  }
+  if (tabelaGerItens) {
+    tabelaGerItens.addEventListener("click", function (e) {
+      const acao = e.target.getAttribute("data-acao");
+      const patrimonio = e.target.getAttribute("data-id");
+      if (acao !== "ativar-item") return;
+
+      for (let i = 0; i < itens.length; i++) {
+        if (itens[i].patrimonio === patrimonio) {
+          itens[i].ativo = !itens[i].ativo; // inativa ou libera
+        }
+      }
+      gravarLista(CH_ITENS, itens);
+      atualizarGerenciar();
+    });
+  }
+  const botaoSalvarItem = document.querySelector("[data-action='salvar-item']");
+  if (botaoSalvarItem) botaoSalvarItem.addEventListener("click", salvarItem);
+
+  // ABA RECEBEDORES
+  const recNome = document.getElementById("rec-nome");
+  const recMatricula = document.getElementById("rec-matricula");
+  const recSenha = document.getElementById("rec-senha");
+  const recErro = document.getElementById("rec-erro");
+  const tabelaRecebedores = document.getElementById("tabela-recebedores");
+
+  function mostrarRecebedores() {
+    if (!tabelaRecebedores) return;
+
+    const linhas = [];
+    for (let i = 0; i < recebedores.length; i++) {
+      const r = recebedores[i];
+      linhas.push([
+        escapar(r.nome),
+        escapar(r.matricula),
+        botaoAcao("Remover", "btn-outline-danger", "remover-recebedor", r.matricula)
+      ]);
+    }
+    montarTabelaGerenciar(tabelaRecebedores, ["Nome", "Matrícula", "Ações"], linhas);
+  }
+  function salvarRecebedor() {
+    recErro.textContent = "";
+
+    const nome = recNome.value.trim();
+    const matricula = recMatricula.value.trim();
+    const senha = recSenha.value.trim();
+
+    if (nome === "" || matricula === "" || senha === "") {
+      recErro.textContent = "Preencha nome, matrícula e senha.";
+      return;
+    }
+
+    // Não deixa repetir a matrícula
+    for (let i = 0; i < recebedores.length; i++) {
+      if (recebedores[i].matricula === matricula) {
+        recErro.textContent = "Essa matrícula já está cadastrada.";
+        return;
+      }
+    }
+
+    recebedores.push({ nome: nome, matricula: matricula, senha: senha });
+    gravarLista(CH_RECEBEDORES, recebedores);
+
+    recNome.value = "";
+    recMatricula.value = "";
+    recSenha.value = "";
+
+    atualizarGerenciar();
+  }
+
+  if (tabelaRecebedores) {
+    tabelaRecebedores.addEventListener("click", function (e) {
+      const acao = e.target.getAttribute("data-acao");
+      const matricula = e.target.getAttribute("data-id");
+      if (acao !== "remover-recebedor") return;
+
+      if (!confirm("Remover este recebedor?")) return;
+
+      for (let i = 0; i < recebedores.length; i++) {
+        if (recebedores[i].matricula === matricula) {
+          recebedores.splice(i, 1);
+          break;
+        }
+      }
+      gravarLista(CH_RECEBEDORES, recebedores);
+      atualizarGerenciar();
+    });
+  }
+  const botaoSalvarRecebedor = document.querySelector("[data-action='salvar-recebedor']");
+  if (botaoSalvarRecebedor) botaoSalvarRecebedor.addEventListener("click", salvarRecebedor);
+
+  // ABA EXTRAVIOS
+  const tabelaExtravios = document.getElementById("tabela-extravios");
+
+  function mostrarExtravios() {
+    if (!tabelaExtravios) return;
+
+    // Soma empenhos e subtrai devoluções por recebedor + material
+    const grupos = {};
+    for (let i = 0; i < movimentacoes.length; i++) {
+      const m = movimentacoes[i];
+      const chave = m.recebedor + "||" + m.material;
+
+      if (!grupos[chave]) {
+        grupos[chave] = { recebedor: m.recebedor, material: m.material, qtd: 0 };
+      }
+      if (m.tipo === "Empenho") {
+        grupos[chave].qtd += m.qtd;
+      } else {
+        grupos[chave].qtd -= m.qtd;
+      }
+    }
+    const linhas = [];
+    for (const chave in grupos) {
+      if (grupos[chave].qtd > 0) {
+        linhas.push([
+          escapar(grupos[chave].recebedor),
+          escapar(grupos[chave].material),
+          grupos[chave].qtd
+        ]);
+      }
+    }
+    montarTabelaGerenciar(tabelaExtravios, ["Recebedor", "Material", "Qtd não devolvida"], linhas);
+  }
+  // Atualiza as 4 abas de uma vez
+  function atualizarGerenciar() {
+    mostrarMateriais();
+    preencherSelectMateriais();
+    mostrarItens();
+    mostrarRecebedores();
+    mostrarExtravios();
+  }
   // INICIALIZAÇÃO 
   preencherRecebedores();
   renderizarHistorico();
+  atualizarGerenciar();
 
 });

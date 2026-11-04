@@ -169,6 +169,55 @@
     </div>
     <div class="table-responsive"><table class="table table-sm" id="tabela-relatorio"></table></div>
   </section>
+  <!-- GERENCIAR MATERIAIS (só administrador de estoque) -->
+  <section id="tela-gerenciar" class="tela" hidden>
+    <h2 class="h4">Gerenciar Materiais</h2>
+    <ul class="nav nav-tabs mb-3">
+      <li class="nav-item"><button class="nav-link active" data-aba="ger-materiais">Materiais</button></li>
+      <li class="nav-item"><button class="nav-link" data-aba="ger-itens">Itens</button></li>
+      <li class="nav-item"><button class="nav-link" data-aba="ger-recebedores">Recebedores</button></li>
+      <li class="nav-item"><button class="nav-link" data-aba="ger-extravios">Extravios</button></li>
+    </ul>
+   <!-- Aba materiais (cadastrar, editar, inativar) -->
+    <div id="ger-materiais" class="aba">
+      <div class="row g-2 mb-3">
+        <div class="col-md-2"><input id="mat-codigo" class="form-control" placeholder="Código"></div>
+        <div class="col-md-4"><input id="mat-nome" class="form-control" placeholder="Nome do material"></div>
+        <div class="col-md-3"><input id="mat-secao" class="form-control" placeholder="Seção (ex.: Comunicação)"></div>
+        <div class="col-md-3"><button class="btn btn-primary" data-action="salvar-material">Salvar material</button></div>
+      </div>
+      <p id="mat-erro" class="text-danger small"></p>
+      <p class="text-body-secondary small">Para editar, clique em Editar na tabela, mude os campos e salve de novo (o código não muda).</p>
+      <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-gerenciar-materiais"></table></div>
+    </div>
+    <!-- Aba itens (cadastrar com patrimônio, inativar, liberar) -->
+    <div id="ger-itens" class="aba" hidden>
+      <div class="row g-2 mb-3">
+        <div class="col-md-4"><select id="item-material" class="form-select"></select></div>
+        <div class="col-md-4"><input id="item-patrimonio" class="form-control" placeholder="Nº de patrimônio"></div>
+        <div class="col-md-4"><button class="btn btn-primary" data-action="salvar-item">Cadastrar item</button></div>
+      </div>
+      <p id="item-erro" class="text-danger small"></p>
+      <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-gerenciar-itens"></table></div>
+    </div>
+    <!-- Aba recebedores (matrícula e senha) -->
+    <div id="ger-recebedores" class="aba" hidden>
+      <div class="row g-2 mb-3">
+        <div class="col-md-3"><input id="rec-nome" class="form-control" placeholder="Nome"></div>
+        <div class="col-md-3"><input id="rec-matricula" class="form-control" placeholder="Matrícula"></div>
+        <div class="col-md-3"><input id="rec-senha" type="password" class="form-control" placeholder="Senha"></div>
+        <div class="col-md-3"><button class="btn btn-primary" data-action="salvar-recebedor">Cadastrar recebedor</button></div>
+      </div>
+      <p id="rec-erro" class="text-danger small"></p>
+      <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-recebedores"></table></div>
+    </div>
+    <!-- Aba extravios -->
+    <div id="ger-extravios" class="aba" hidden>
+      <p class="text-body-secondary">Itens de empenhos abertos que ainda não foram devolvidos.</p>
+      <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-extravios"></table></div>
+    </div>
+  </section>
+
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
