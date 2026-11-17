@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 public record CriarUsuarioRequest(
         @NotBlank @Size(max = 120) String nome,
         @NotBlank @Size(max = 40) String matricula,
-        @NotBlank @Size(min = 8, max = 128) String senhaInicial,
+        @NotBlank @Size(min = 15, max = 128) String senhaInicial,
         @NotNull PerfilUsuario perfil,
         @NotBlank @Size(max = 80) String setor,
         @Size(max = 40) String turno) {

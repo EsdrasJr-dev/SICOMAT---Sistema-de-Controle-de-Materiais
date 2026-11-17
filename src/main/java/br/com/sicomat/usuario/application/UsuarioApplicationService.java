@@ -57,6 +57,14 @@ public class UsuarioApplicationService {
         usuarios.save(usuario);
     }
 
+    @Transactional
+    public void redefinirSenha(long id, String novaSenha) {
+        UsuarioJpaEntity usuario = usuarios.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado."));
+        usuario.redefinirSenha(CodificadorSenha.codificar(novaSenha));
+        usuarios.save(usuario);
+    }
+
     private static UsuarioResponse resposta(UsuarioJpaEntity usuario) {
         return new UsuarioResponse(
                 usuario.getId(),

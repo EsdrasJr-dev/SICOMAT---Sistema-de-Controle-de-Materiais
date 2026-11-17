@@ -1,5 +1,6 @@
 package br.com.sicomat.usuario.infrastructure.persistence;
 
+import br.com.sicomat.seguranca.CodificadorSenha;
 import br.com.sicomat.usuario.PerfilUsuario;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -97,6 +98,14 @@ public class UsuarioJpaEntity {
         falhasLogin = 0;
         inicioJanelaFalhas = null;
         bloqueadoAte = null;
+    }
+
+    public void redefinirSenha(String novoHash) {
+        if (!CodificadorSenha.formatoValido(novoHash)) {
+            throw new IllegalArgumentException("A nova senha precisa ser armazenada em formato de hash válido.");
+        }
+        senhaHash = novoHash;
+        limparFalhas();
     }
 
     public void inativar() {

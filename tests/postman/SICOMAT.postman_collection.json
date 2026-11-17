@@ -1,0 +1,111 @@
+{
+  "info": {
+    "_postman_id": "f9a1bb70-c5c4-4bb8-a6a8-6a805a1a7b51",
+    "name": "SICOMAT API",
+    "description": "Testes de integração das APIs do SICOMAT. Importar no Postman e configurar a variável baseUrl, matricula e senha.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "matricula", "value": "admin" },
+    { "key": "senha", "value": "" },
+    { "key": "csrf", "value": "" },
+    { "key": "equipeId", "value": "" },
+    { "key": "recebedorId", "value": "" },
+    { "key": "materialId", "value": "" },
+    { "key": "itemMaterialId", "value": "" },
+    { "key": "empenhoId", "value": "" },
+    { "key": "itemEmpenhoId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Status público",
+      "item": [{
+        "name": "GET status",
+        "request": { "method": "GET", "url": "{{baseUrl}}/status" },
+        "event": [{ "listen": "test", "script": { "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+      }]
+    },
+    {
+      "name": "Segurança e conta",
+      "item": [
+        {
+          "name": "GET CSRF",
+          "request": { "method": "GET", "url": "{{baseUrl}}/csrf" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('status 200 e token sem cache', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });", "const body = pm.response.json(); pm.collectionVariables.set('csrf', body.token); pm.test('token/header disponíveis', () => { pm.expect(body.token).to.be.a('string').and.not.empty; pm.expect(body.headerName).to.eql('X-CSRF-TOKEN'); });"] } }]
+        },
+        {
+          "name": "GET conta atual",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "GET", "url": "{{baseUrl}}/conta" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('não expõe hash', () => { const b = pm.response.json(); pm.expect(b).not.to.have.property('senhaHash'); pm.expect(b).not.to.have.property('pinHash'); });"] } }]
+        },
+        {
+          "name": "POST material sem CSRF deve ser bloqueado",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"codigo\":\"TESTE-CSRF\",\"nome\":\"Material teste\"}" }, "url": "{{baseUrl}}/materiais" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('sem token retorna 403', () => pm.response.to.have.status(403));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Estoque (administrador do estoque)",
+      "item": [
+        {
+          "name": "POST criar material",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"codigo\":\"POSTMAN-HT\",\"nome\":\"Rádio de teste\"}" }, "url": "{{baseUrl}}/materiais" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('material criado', () => pm.response.to.have.status(201));", "const body = pm.response.json(); pm.collectionVariables.set('materialId', body.id); pm.test('resposta possui identificador', () => pm.expect(body.id).to.be.a('number')); "] } }]
+        },
+        {
+          "name": "GET listar materiais",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "GET", "url": "{{baseUrl}}/materiais" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('lista JSON', () => pm.expect(pm.response.json()).to.be.an('array')); "] } }]
+        },
+        {
+          "name": "POST cadastrar item físico",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"numeroPatrimonio\":\"POSTMAN-PAT-001\"}" }, "url": "{{baseUrl}}/materiais/{{materialId}}/itens" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('item criado', () => pm.response.to.have.status(201));", "pm.collectionVariables.set('itemMaterialId', pm.response.json().id); "] } }]
+        }
+      ]
+    },
+    {
+      "name": "Equipes e recebedores (administrador do estoque)",
+      "item": [
+        {
+          "name": "POST criar equipe",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"nome\":\"Equipe Postman\"}" }, "url": "{{baseUrl}}/equipes" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('equipe criada', () => pm.response.to.have.status(201));", "pm.collectionVariables.set('equipeId', pm.response.json().id); "] } }]
+        },
+        {
+          "name": "POST criar recebedor",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"nome\":\"Recebedor Postman\",\"matricula\":\"RC-POSTMAN\",\"pinInicial\":\"482913\"}" }, "url": "{{baseUrl}}/recebedores" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('recebedor criado sem expor PIN/hash', () => { pm.response.to.have.status(201); const b = pm.response.json(); pm.expect(b).not.to.have.property('pinHash'); pm.collectionVariables.set('recebedorId', b.id); });"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Movimentações (operador do estoque)",
+      "description": "Use credenciais de operador para essas requisições. Se a conta Postman não tem esse perfil, selecione/desabilite a pasta no Runner.",
+      "item": [
+        {
+          "name": "POST criar empenho pendente",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"recebedorId\":{{recebedorId}},\"equipeId\":{{equipeId}},\"itemMaterialIds\":[{{itemMaterialId}}],\"observacao\":\"Teste Postman\"}" }, "url": "{{baseUrl}}/empenhos" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('empenho criado pendente', () => { pm.response.to.have.status(201); const b=pm.response.json(); pm.expect(b.status).to.eql('PENDENTE'); pm.collectionVariables.set('empenhoId', b.id); pm.collectionVariables.set('itemEmpenhoId', b.itens[0].id); });"] } }]
+        },
+        {
+          "name": "POST confirmar com PIN",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"pin\":\"482913\",\"justificativa\":\"Confirmado no teste Postman\"}" }, "url": "{{baseUrl}}/empenhos/{{empenhoId}}/confirmacao" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('PIN confirma empenho', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.confirmado).to.eql(true); pm.expect(b.empenho.status).to.eql('ABERTO'); });"] } }]
+        },
+        {
+          "name": "POST registrar devolução",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-CSRF-TOKEN", "value": "{{csrf}}" }], "body": { "mode": "raw", "raw": "{\"devolvidoPorId\":{{recebedorId}},\"itens\":[{\"itemEmpenhoId\":{{itemEmpenhoId}},\"condicao\":\"BOM\"}],\"observacao\":\"Devolução de teste\"}" }, "url": "{{baseUrl}}/empenhos/{{empenhoId}}/devolucoes" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('devolução registrada', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().itens[0].condicao).to.eql('BOM'); });"] } }]
+        },
+        {
+          "name": "GET empenhos abertos",
+          "request": { "auth": { "type": "basic", "basic": [{ "key": "username", "value": "{{matricula}}", "type": "string" }, { "key": "password", "value": "{{senha}}", "type": "string" }] }, "method": "GET", "url": "{{baseUrl}}/empenhos/abertos?pagina=0&tamanho=20" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('lista paginada', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.conteudo).to.be.an('array'); pm.expect(b.pagina).to.eql(0); });"] } }]
+        }
+      ]
+    }
+  ]
+}

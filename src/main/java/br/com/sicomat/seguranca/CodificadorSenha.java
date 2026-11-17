@@ -13,7 +13,7 @@ public final class CodificadorSenha {
 
     private static final String ALGORITMO = "PBKDF2WithHmacSHA256";
     private static final String PREFIXO = "pbkdf2_sha256";
-    private static final int ITERACOES = 210_000;
+    private static final int ITERACOES = 600_000;
     private static final int TAMANHO_SALT = 16;
     private static final int TAMANHO_HASH_BITS = 256;
     private static final int ITERACOES_MINIMAS = 10_000;
@@ -44,6 +44,11 @@ public final class CodificadorSenha {
     /** Valida o formato armazenado sem comparar com uma senha. */
     public static boolean formatoValido(String hashArmazenado) {
         return hashArmazenado != null && interpretar(hashArmazenado) != null;
+    }
+
+    public static boolean precisaAtualizar(String hashArmazenado) {
+        DadosHash dados = hashArmazenado == null ? null : interpretar(hashArmazenado);
+        return dados != null && dados.iteracoes < ITERACOES;
     }
 
     private static DadosHash interpretar(String hashArmazenado) {

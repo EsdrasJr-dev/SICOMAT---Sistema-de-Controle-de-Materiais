@@ -73,4 +73,22 @@ public class EstoqueController {
     public List<ItemMaterialResponse> listarItensDisponiveis(@AuthenticationPrincipal UsuarioAutenticado usuario) {
         return estoque.listarItensDisponiveis(usuario);
     }
+
+    @PatchMapping("/itens/{id}/liberacao")
+    @PreAuthorize("hasRole('ADMINISTRADOR_ESTOQUE')")
+    public ResponseEntity<Void> liberarItem(
+            @AuthenticationPrincipal UsuarioAutenticado usuario,
+            @PathVariable long id) {
+        estoque.liberarItem(usuario, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/itens/{id}/inativacao")
+    @PreAuthorize("hasRole('ADMINISTRADOR_ESTOQUE')")
+    public ResponseEntity<Void> inativarItem(
+            @AuthenticationPrincipal UsuarioAutenticado usuario,
+            @PathVariable long id) {
+        estoque.inativarItem(usuario, id);
+        return ResponseEntity.noContent().build();
+    }
 }

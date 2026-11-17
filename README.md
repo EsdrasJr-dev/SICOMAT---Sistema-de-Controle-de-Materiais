@@ -2,7 +2,7 @@
 
 ### Sistema de Controle de Materiais
 
-Aplicação para registrar e acompanhar materiais sob responsabilidade de equipes durante o serviço de dia e na reserva de armas.
+Aplicação para registrar e acompanhar materiais e itens físicos sob responsabilidade de equipes durante um serviço.
 
 ## 💡 Motivação e problema
 
@@ -26,15 +26,18 @@ A conta única do administrador do sistema não pode ser substituída pela aplic
 
 ## ⚙️ Funcionalidades previstas
 
-- Cadastro de administradores e operadores do estoque pelo administrador do sistema.
+- Cadastro, inativação e redefinição de senha de administradores e operadores do estoque pelo administrador do sistema.
 - Cadastro, edição e inativação de materiais e itens físicos pelo administrador do estoque.
+- Cadastro de equipes e recebedores do estoque pelo administrador do estoque.
 - Registro de empenho de itens para uma equipe pelo operador do estoque, com identificação dos responsáveis e da movimentação.
+- Confirmação do recebimento por PIN, com bloqueio temporário após tentativas inválidas e justificativa registrada.
 - Registro de devoluções totais ou parciais, inclusive quando ocorrem em horários diferentes.
-- Registro de trocas de itens durante o turno.
-- Autenticação facial consentida do recebedor como regra do MVP; PIN como exceção quando a facial não puder ser concluída, com justificativa registrada.
+- Registro de avarias e extravios, com controle de itens disponíveis, empenhados, avariados e inativos.
 - Bloqueio temporário após cinco falhas de senha ou PIN em cinco minutos; a credencial é liberada automaticamente após cinco minutos.
-- Painel de conferência com itens disponíveis, empenhados e ainda não devolvidos.
+- Consulta de empenhos pendentes, abertos e do histórico de devoluções.
 - Histórico das movimentações para consulta e apoio a conferências e auditorias.
+
+O provedor de verificação facial ainda não foi integrado. No backend atual, a confirmação do recebedor usa PIN; o sistema não coleta nem simula reconhecimento facial.
 
 ## 🌐 Possíveis aplicações em outros setores
 
@@ -48,7 +51,7 @@ Embora tenha surgido para atender ao serviço de dia da Polícia Militar, a prop
 | Interface | A interface Thymeleaf + Bootstrap permanece planejada; o backend expõe API REST |
 | Banco de dados | PostgreSQL 17 |
 
-A arquitetura e o escopo atual da integração estão descritos em [docs/arquitetura.md](docs/arquitetura.md).
+A arquitetura está descrita em [docs/arquitetura.md](docs/arquitetura.md). As rotas, formatos de requisição e regras para integração do frontend estão em [docs/api.md](docs/api.md); a revisão de segurança está em [docs/seguranca-backend.md](docs/seguranca-backend.md).
 
 ## 📐 Diagrama de classes
 
@@ -72,13 +75,15 @@ A arquitetura e o escopo atual da integração estão descritos em [docs/arquite
 
 Requisitos: JDK 21 e Docker com Compose.
 
-1. Copie .env.example para .env e defina uma senha forte em SICOMAT_ADMIN_SENHA.
+1. Crie um arquivo local `.env` na raiz do projeto e configure `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `POSTGRES_DB` e as variáveis `SICOMAT_ADMIN_*`. O arquivo `.env` é ignorado pelo Git e não deve ser enviado ao repositório.
 2. Inicie o PostgreSQL: docker compose up -d database.
 3. Inicie a aplicação: .\mvnw.cmd spring-boot:run.
 4. Confira http://localhost:8080/api/v1/status.
 
-Na primeira inicialização, a aplicação cria a conta única de administrador do sistema a partir das variáveis SICOMAT_ADMIN_* do arquivo .env. Não use os valores de exemplo em ambientes compartilhados. As demais rotas exigem autenticação HTTP Basic com matrícula e senha.
+Na primeira inicialização, a aplicação cria a conta única de administrador do sistema a partir das variáveis SICOMAT_ADMIN_* do arquivo .env. Não use os valores de exemplo em ambientes compartilhados. As rotas privadas exigem autenticação HTTP Basic com matrícula e senha. Para chamadas que alteram dados, consulte o token CSRF em `GET /api/v1/csrf` e envie o token no cabeçalho indicado pela resposta. Consulte [docs/api.md](docs/api.md) para os detalhes de integração.
+
+Para executar os testes automatizados: `.\mvnw.cmd test`.
 
 ## 📊 Status do projeto
 
-🟡 **Backend Spring Boot em implementação** — a base da API, autenticação e inventário está integrada; a persistência dos fluxos de movimentação, a interface e o provedor facial ainda serão implementados.
+🟡 **Backend Spring Boot em implementação** — a API REST, autenticação, inventário, equipes, recebedores, empenhos e devoluções estão implementados. A interface frontend e o provedor de verificação facial continuam planejados.

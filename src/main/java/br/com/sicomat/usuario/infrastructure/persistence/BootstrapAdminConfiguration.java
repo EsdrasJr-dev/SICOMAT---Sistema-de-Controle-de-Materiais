@@ -41,7 +41,8 @@ public class BootstrapAdminConfiguration {
     }
 
     private static void exigirConfigurado(String valor, String variavel) {
-        if (valor == null || valor.isBlank() || valor.startsWith("SUBSTITUA_") || variavel.equals("SICOMAT_ADMIN_SENHA") && valor.length() < 8) {
+        if (valor == null || valor.isBlank() || valor.startsWith("SUBSTITUA_")
+                || variavel.equals("SICOMAT_ADMIN_SENHA") && (valor.length() < 15 || valor.length() > 128)) {
             throw new IllegalStateException("Configure " + variavel + " antes de iniciar o SICOMAT.");
         }
     }

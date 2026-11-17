@@ -27,17 +27,20 @@ public class AutenticacaoContaService {
             return new Validacao(Status.INVALIDA, null);
         }
 
-        if (!usuario.isAtivo()) return new Validacao(Status.INATIVA, null);
-
         LocalDateTime agora = LocalDateTime.now();
         if (usuario.estaBloqueado(agora)) return new Validacao(Status.BLOQUEADA, null);
+        boolean senhaCorreta = CodificadorSenha.verificar(senha, usuario.getSenhaHash());
+        if (!usuario.isAtivo()) return new Validacao(Status.INATIVA, null);
 
-        if (!CodificadorSenha.verificar(senha, usuario.getSenhaHash())) {
+        if (!senhaCorreta) {
             usuario.registrarFalha(agora);
             usuarios.save(usuario);
             return new Validacao(usuario.estaBloqueado(agora) ? Status.BLOQUEADA : Status.INVALIDA, null);
         }
 
+        if (CodificadorSenha.precisaAtualizar(usuario.getSenhaHash())) {
+            usuario.redefinirSenha(CodificadorSenha.codificar(senha));
+        }
         usuario.limparFalhas();
         usuarios.save(usuario);
         return new Validacao(Status.AUTENTICADA, UsuarioAutenticado.de(usuario));

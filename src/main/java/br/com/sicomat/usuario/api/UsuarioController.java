@@ -41,4 +41,12 @@ public class UsuarioController {
         usuarios.inativar(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}/senha")
+    public ResponseEntity<Void> redefinirSenha(
+            @PathVariable long id,
+            @Valid @RequestBody RedefinirSenhaRequest requisicao) {
+        usuarios.redefinirSenha(id, requisicao.novaSenha());
+        return ResponseEntity.noContent().build();
+    }
 }

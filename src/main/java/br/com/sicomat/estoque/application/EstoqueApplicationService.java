@@ -62,12 +62,42 @@ public class EstoqueApplicationService {
     @Transactional
     public void inativarMaterial(UsuarioAutenticado usuario, long id) {
         MaterialJpaEntity material = buscarDoSetor(usuario, id);
+        List<ItemMaterialJpaEntity> itensMaterial = itens.findAllByMaterial_Id(id);
+        if (itensMaterial.stream().anyMatch(ItemMaterialJpaEntity::isReservado)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cancele os empenhos pendentes antes de inativar este material.");
+        }
         material.inativar();
-        for (ItemMaterialJpaEntity item : itens.findAllByMaterial_Id(id)) {
+        for (ItemMaterialJpaEntity item : itensMaterial) {
             if (item.getStatus() == StatusItem.DISPONIVEL || item.getStatus() == StatusItem.AVARIADO) {
                 item.setStatus(StatusItem.INATIVO);
             }
         }
+    }
+
+    @Transactional
+    public void liberarItem(UsuarioAutenticado usuario, long id) {
+        ItemMaterialJpaEntity item = buscarItemDoSetor(usuario, id);
+        if (item.isReservado() || item.getStatus() != StatusItem.AVARIADO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Somente um item avariado e sem reserva pode ser liberado.");
+        }
+        if (!item.getMaterial().isAtivo()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Reative o material antes de liberar este item.");
+        }
+        item.setStatus(StatusItem.DISPONIVEL);
+    }
+
+    @Transactional
+    public void inativarItem(UsuarioAutenticado usuario, long id) {
+        ItemMaterialJpaEntity item = buscarItemDoSetor(usuario, id);
+        if (item.isReservado() || (item.getStatus() != StatusItem.DISPONIVEL
+                && item.getStatus() != StatusItem.AVARIADO)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Somente um item disponível ou avariado e sem reserva pode ser inativado.");
+        }
+        item.setStatus(StatusItem.INATIVO);
     }
 
     @Transactional
@@ -87,7 +117,8 @@ public class EstoqueApplicationService {
 
     @Transactional(readOnly = true)
     public List<ItemMaterialResponse> listarItensDisponiveis(UsuarioAutenticado usuario) {
-        return itens.findAllByMaterial_SetorAndStatusOrderByNumeroPatrimonio(usuario.setor(), StatusItem.DISPONIVEL)
+        return itens.findAllByMaterial_SetorAndStatusAndEmpenhoPendenteIsNullOrderByNumeroPatrimonio(
+                        usuario.setor(), StatusItem.DISPONIVEL)
                 .stream()
                 .filter(item -> item.getMaterial().isAtivo())
                 .map(EstoqueApplicationService::respostaItem)
@@ -99,6 +130,12 @@ public class EstoqueApplicationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Material não encontrado neste estoque."));
     }
 
+    private ItemMaterialJpaEntity buscarItemDoSetor(UsuarioAutenticado usuario, long id) {
+        return itens.findByIdAndSetor(id, usuario.setor())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Item não encontrado neste estoque."));
+    }
+
     private MaterialResponse respostaMaterial(MaterialJpaEntity material) {
         return new MaterialResponse(
                 material.getId(),
@@ -106,7 +143,7 @@ public class EstoqueApplicationService {
                 material.getNome(),
                 material.isAtivo(),
                 itens.countByMaterial_Id(material.getId()),
-                itens.countByMaterial_IdAndStatus(material.getId(), StatusItem.DISPONIVEL));
+                itens.countByMaterial_IdAndStatusAndEmpenhoPendenteIsNull(material.getId(), StatusItem.DISPONIVEL));
     }
 
     private static ItemMaterialResponse respostaItem(ItemMaterialJpaEntity item) {
