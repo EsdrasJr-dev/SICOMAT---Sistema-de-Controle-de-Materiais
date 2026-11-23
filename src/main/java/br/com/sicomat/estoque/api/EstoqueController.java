@@ -1,10 +1,8 @@
 package br.com.sicomat.estoque.api;
 
-import br.com.sicomat.config.UsuarioAutenticado;
-import br.com.sicomat.estoque.application.EstoqueApplicationService;
-import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,6 +14,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import br.com.sicomat.config.UsuarioAutenticado;
+import br.com.sicomat.estoque.application.EstoqueApplicationService;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -67,6 +69,12 @@ public class EstoqueController {
             @Valid @RequestBody CadastrarItemRequest requisicao) {
         ItemMaterialResponse item = estoque.cadastrarItem(usuario, id, requisicao);
         return ResponseEntity.created(URI.create("/api/v1/materiais/" + id + "/itens/" + item.id())).body(item);
+    }
+
+    @GetMapping("/itens")
+    @PreAuthorize("hasRole('ADMINISTRADOR_ESTOQUE')")
+    public List<ItemMaterialResponse> listarTodosOsItens(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+        return estoque.listarTodosOsItens(usuario);
     }
 
     @GetMapping("/itens/disponiveis")

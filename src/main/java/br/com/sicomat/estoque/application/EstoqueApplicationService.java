@@ -125,6 +125,13 @@ public class EstoqueApplicationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ItemMaterialResponse> listarTodosOsItens(UsuarioAutenticado usuario) {
+        return itens.findAllBySetorOrderByNumeroPatrimonio(usuario.setor()).stream()
+                .map(EstoqueApplicationService::respostaItem)
+                .toList();
+    }
+
     private MaterialJpaEntity buscarDoSetor(UsuarioAutenticado usuario, long id) {
         return materiais.findByIdAndSetor(id, usuario.setor())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Material não encontrado neste estoque."));
