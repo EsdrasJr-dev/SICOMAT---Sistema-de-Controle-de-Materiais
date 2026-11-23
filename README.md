@@ -78,7 +78,6 @@ Requisitos: JDK 21 e Docker com Compose.
 1. Crie um arquivo local `.env` na raiz do projeto e configure `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `POSTGRES_DB` e as variáveis `SICOMAT_ADMIN_*`. O arquivo `.env` é ignorado pelo Git e não deve ser enviado ao repositório.
 2. Inicie o PostgreSQL: docker compose up -d database.
 3. Inicie a aplicação: .\mvnw.cmd spring-boot:run.
-4. Confira http://localhost:8080/api/v1/status.
 
 Na primeira inicialização, a aplicação cria a conta única de administrador do sistema a partir das variáveis SICOMAT_ADMIN_* do arquivo .env. Não use os valores de exemplo em ambientes compartilhados. As rotas privadas exigem autenticação HTTP Basic com matrícula e senha. Para chamadas que alteram dados, consulte o token CSRF em `GET /api/v1/csrf` e envie o token no cabeçalho indicado pela resposta. Consulte [docs/api.md](docs/api.md) para os detalhes de integração.
 
