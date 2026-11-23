@@ -16,6 +16,8 @@ public interface ItemMaterialJpaRepository extends JpaRepository<ItemMaterialJpa
 
     long countByMaterial_Id(long materialId);
 
+    List<ItemMaterialJpaEntity> findAllByMaterial_Id(long materialId);
+
     long countByMaterial_IdAndStatus(long materialId, StatusItem status);
 
     long countByMaterial_IdAndStatusAndEmpenhoPendenteIsNull(long materialId, StatusItem status);

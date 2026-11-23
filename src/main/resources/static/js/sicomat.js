@@ -52,10 +52,38 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   const usuarios = lerUsuarios();
   let usuarioLogado = null;
+  let autorizacaoAtual = null;
 
-  function telaPermitida(nome) {
-    return !!usuarioLogado && TELAS_PERMITIDAS[usuarioLogado.perfil].includes(nome);
+  async function consultarConta(autorizacao) {
+  const resposta = await fetch("/api/v1/conta", {
+    method: "GET",
+    headers: {
+      "Authorization": autorizacao
+    },
+    credentials: "same-origin"
+  });
+
+  if (!resposta.ok) {
+    throw new Error("HTTP " + resposta.status);
   }
+
+  return await resposta.json();
+}
+
+function converterPerfil(perfilBackend) {
+  const perfis = {
+    OPERADOR_ESTOQUE: "operador",
+    ADMINISTRADOR_ESTOQUE: "estoque",
+    ADMINISTRADOR_SISTEMA: "sistema"
+  };
+
+  return perfis[perfilBackend] || null;
+}
+
+function telaPermitida(nome) {
+  return !!usuarioLogado &&
+    TELAS_PERMITIDAS[usuarioLogado.perfil].includes(nome);
+}
 
   // =====================================================================
   // DADOS DO ESTOQUE (ficam salvos no navegador)
@@ -371,9 +399,9 @@ document.addEventListener("DOMContentLoaded", function () {
   // =====================================================================
   // LOGIN
   // =====================================================================
-  function fazerLogin() {
+  async function fazerLogin() {
     const login = campoLogin.value.trim();
-    const senha = campoSenha.value.trim();
+    const senha = campoSenha.value;
 
     mensagemErro.textContent = "";
 
@@ -382,16 +410,37 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    const u = usuarios.find(x => x.login === login && x.senha === senha);
+    const credenciais = new TextEncoder().encode(login + ":" + senha);
+    const autorizacao = "Basic " + btoa(
+      String.fromCharCode(...credenciais)
+    );
 
-    if (!u) {
-      mensagemErro.textContent = "Usuário ou senha incorretos.";
+    let conta;
+
+    try {
+      conta = await consultarConta(autorizacao);
+    } catch (erro) {
+    mensagemErro.textContent =
+     erro.message === "HTTP 401"
+       ? "Matrícula ou senha incorretas."
+        : "Não foi possível autenticar. Verifique a conexão com o servidor.";
+    return;
+    }
+
+    const perfil = converterPerfil(conta.perfil);
+
+    if (!perfil) {
+      mensagemErro.textContent = "Perfil de usuário não reconhecido.";
       return;
     }
-    if (!u.ativo) {
-      mensagemErro.textContent = "Este usuário está inativo.";
-      return;
-    }
+
+    const u = {
+       ...conta,
+        login: conta.matricula,
+        perfil: perfil
+    };
+
+    autorizacaoAtual = autorizacao;
     logarUsuario(u);
   }
 
@@ -432,6 +481,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (botaoSair) {
     botaoSair.addEventListener("click", function () {
       usuarioLogado = null;
+      autorizacaoAtual = null;
       rascunho = [];
       telaSistema.hidden = true;
       telaLogin.hidden = false;
