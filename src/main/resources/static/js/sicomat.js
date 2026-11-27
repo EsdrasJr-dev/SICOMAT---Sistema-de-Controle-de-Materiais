@@ -60,6 +60,16 @@ document.addEventListener("DOMContentLoaded", function () {
   let consultaItensVersao = 0;
   let salvandoItem = false;
 
+  // Dados de equipes e recebedores recebidos da API
+  let equipesApi = [];
+  let recebedoresApi = [];
+
+  let consultaEquipesVersao = 0;
+  let consultaRecebedoresVersao = 0;
+
+  let salvandoEquipe = false;
+  let salvandoRecebedor = false;
+
     // Função central de comunicação com o backend
   async function requisitarApi(
     caminho,
@@ -146,6 +156,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
     return { todos, disponiveis };
   }
+
+  // Busca as equipes cadastradas no backend
+async function carregarEquipes() {
+  const dados = await requisitarApi("/api/v1/equipes");
+
+  if (!Array.isArray(dados)) {
+    throw new Error("Resposta de equipes inválida.");
+  }
+
+  return dados;
+}
+
+// Busca os recebedores cadastrados no backend
+async function carregarRecebedores() {
+  const dados = await requisitarApi("/api/v1/recebedores");
+
+  if (!Array.isArray(dados)) {
+    throw new Error("Resposta de recebedores inválida.");
+  }
+
+  return dados;
+}
 
 function converterPerfil(perfilBackend) {
   const perfis = {
@@ -576,6 +608,28 @@ function telaPermitida(nome) {
       itemMaterial.value = "";
       itemPatrimonio.value = "";
       itemErro.textContent = "";
+
+      equipesApi = [];
+      consultaEquipesVersao++;
+      mostrarEquipes();
+      eqNome.value = "";
+      eqErro.textContent = "";
+
+      recebedoresApi = [];
+      consultaRecebedoresVersao++;
+      mostrarRecebedores();
+      recNome.value = "";
+      recMatricula.value = "";
+      recPin.value = "";
+      recErro.textContent = "";
+
+      const campoNovoPin = document.getElementById("novo-pin");
+
+      if (campoNovoPin) {
+        campoNovoPin.value = "";
+      }
+
+      fecharModal();
 
       rascunho = [];
       telaSistema.hidden = true;
@@ -1632,67 +1686,253 @@ function telaPermitida(nome) {
   // ---------- ABA RECEBEDORES ----------
   const recNome = document.getElementById("rec-nome");
   const recMatricula = document.getElementById("rec-matricula");
-  const recSenha = document.getElementById("rec-senha");
+  const recPin = document.getElementById("rec-pin");
   const recErro = document.getElementById("rec-erro");
   const tabelaRecebedores = document.getElementById("tabela-recebedores");
 
   function mostrarRecebedores() {
-    if (!tabelaRecebedores) return;
+  if (!tabelaRecebedores) return;
 
-    const linhas = [];
-    for (let i = 0; i < recebedores.length; i++) {
-      const r = recebedores[i];
-      linhas.push([
-        escapar(r.nome),
-        escapar(r.matricula),
-        botaoAcao("Remover", "btn-outline-danger", "remover-recebedor", r.matricula)
-      ]);
-    }
-    montarTabelaGerenciar(tabelaRecebedores, ["Nome", "Matrícula", "Ações"], linhas);
+  const podeGerenciar =
+    usuarioLogado?.perfil === "estoque";
+
+  const linhas = recebedoresApi
+    .filter(r => r.ativo)
+    .map(r => [
+      escapar(r.nome),
+      escapar(r.matricula),
+
+      podeGerenciar ? botaoAcao("Redefinir PIN", "btn-outline-primary", "redefinir-pin", r.id) +
+          botaoAcao("Inativar", "btn-outline-danger", "inativar-recebedor", r.id)
+        : "—"
+    ]);
+
+  montarTabelaGerenciar(
+    tabelaRecebedores,
+    ["Nome", "Matrícula", "Ações"],
+    linhas
+  );
+}
+
+async function atualizarConsultaRecebedores() {
+  if (!usuarioLogado ||
+      !["estoque", "operador"].includes(usuarioLogado.perfil)) return;
+
+  const usuario = usuarioLogado;
+  const versao = ++consultaRecebedoresVersao;
+
+  recebedoresApi = [];
+  mostrarRecebedores();
+
+  try {
+    const dados = await carregarRecebedores();
+
+    if (usuario !== usuarioLogado ||
+        versao !== consultaRecebedoresVersao) return;
+
+    recebedoresApi = dados;
+    mostrarRecebedores();
+
+  } catch (erro) {
+    if (usuario !== usuarioLogado ||
+        versao !== consultaRecebedoresVersao) return;
+
+    console.error("Erro ao consultar recebedores:", erro);
+
+    mostrarAviso(
+      "Erro na consulta",
+      "Não foi possível carregar os recebedores."
+    );
+  }
+}
+
+  async function salvarRecebedor() {
+  if (!usuarioLogado ||
+      usuarioLogado.perfil !== "estoque" ||
+      salvandoRecebedor) return;
+
+  recErro.textContent = "";
+
+  const nome = recNome.value.trim();
+  const matricula = recMatricula.value.trim();
+  const pinInicial = recPin.value;
+
+  if (!nome || !matricula) {
+    recErro.textContent = "Preencha nome e matrícula.";
+    return;
   }
 
-  function salvarRecebedor() {
-    recErro.textContent = "";
+  if (nome.length > 120 || matricula.length > 40) {
+    recErro.textContent = "Limite de caracteres excedido.";
+    return;
+  }
 
-    const nome = recNome.value.trim();
-    const matricula = recMatricula.value.trim();
-    const senha = recSenha.value.trim();
+  if (!/^[0-9]{6}$/.test(pinInicial)) {
+    recErro.textContent = "O PIN deve conter seis dígitos.";
+    return;
+  }
 
-    if (nome === "" || matricula === "" || senha === "") {
-      recErro.textContent = "Preencha nome, matrícula e senha.";
-      return;
-    }
-    if (recebedores.some(r => r.matricula === matricula)) {
-      recErro.textContent = "Essa matrícula já está cadastrada.";
-      return;
-    }
+  const usuario = usuarioLogado;
+  salvandoRecebedor = true;
+  recPin.value = "";
 
-    recebedores.push({ nome: nome, matricula: matricula, senha: senha });
+  try {await requisitarApi(
+      "/api/v1/recebedores",
+      "POST",
+      { nome, matricula, pinInicial }
+    );
 
+    if (usuario !== usuarioLogado) return;
     recNome.value = "";
     recMatricula.value = "";
-    recSenha.value = "";
 
-    atualizarTudo();
+    await atualizarConsultaRecebedores();
+
+  } catch (erro) {
+    if (usuario !== usuarioLogado) return;
+
+    recErro.textContent =
+      erro.message === "HTTP 409"
+        ? "Essa matrícula já está cadastrada."
+        : "Não foi possível cadastrar o recebedor.";
+
+  } finally {
+    salvandoRecebedor = false;
   }
+}
+
+  function redefinirPinRecebedor(recebedor) {
+  if (!usuarioLogado || usuarioLogado.perfil !== "estoque" || salvandoRecebedor) return;
+
+  const usuario = usuarioLogado;
+
+  const corpo = `
+    <p>Recebedor: <strong>${escapar(recebedor.nome)}</strong></p>
+    <p>Confirme a identidade do recebedor antes de continuar.</p>
+    <label for="novo-pin" class="form-label">
+      Novo PIN
+    </label><input id="novo-pin" type="password" class="form-control" placeholder="Digite seis dígitos" maxlength="6" autocomplete="new-password"><p id="novo-pin-erro"
+       class="text-danger small mt-2"></p>
+  `;
+
+  abrirModal("Redefinir PIN", corpo, [
+    {
+      texto: "Cancelar",
+      classe: "btn-outline-secondary"
+    },
+    {
+      texto: "Salvar novo PIN",
+      classe: "btn-primary",
+      manter: true,
+
+      aoClicar: async function () {
+        if (usuario !== usuarioLogado || usuarioLogado.perfil !== "estoque" || salvandoRecebedor) return;
+
+        const campo = document.getElementById("novo-pin");
+        const erroPin = document.getElementById("novo-pin-erro");
+        const novoPin = campo.value;
+
+        erroPin.textContent = "";
+
+        if (!/^[0-9]{6}$/.test(novoPin)) {
+          erroPin.textContent = "O PIN deve conter seis dígitos.";
+          return;
+        }
+
+        salvandoRecebedor = true;
+        campo.value = "";
+
+        try {
+          await requisitarApi(
+            "/api/v1/recebedores/" + recebedor.id + "/pin",
+            "PATCH",
+            { novoPin }
+          );
+
+          if (usuario !== usuarioLogado) return;
+
+          mostrarAviso(
+            "PIN redefinido",
+            "O PIN foi redefinido com sucesso."
+          );
+
+        } catch (erro) {
+          if (usuario !== usuarioLogado) return;
+
+          erroPin.textContent =
+            "Não foi possível redefinir o PIN.";
+
+        } finally {
+          salvandoRecebedor = false;
+        }
+      }
+    }
+  ]);
+
+  const campoPin = document.getElementById("novo-pin");
+
+  if (campoPin) {
+    modalEl.addEventListener("hidden.bs.modal", function () {
+      campoPin.value = "";
+    }, { once: true });
+  }
+}
 
   if (tabelaRecebedores) {
-    tabelaRecebedores.addEventListener("click", function (e) {
-      if (e.target.getAttribute("data-acao") !== "remover-recebedor") return;
+  tabelaRecebedores.addEventListener("click",
+    async function (e) {
 
-      const matricula = e.target.getAttribute("data-id");
+      if (!usuarioLogado || usuarioLogado.perfil !== "estoque" || salvandoRecebedor) return;
 
-      if (temEmpenhoAtivo(matricula)) {
-        mostrarAviso("Não é possível remover", "Este recebedor tem empenho pendente ou em aberto.");
+      const acao = e.target.getAttribute("data-acao");
+      const id = e.target.getAttribute("data-id");
+
+      if (!acao || !id) return;
+
+      const recebedor = recebedoresApi.find(
+        r => String(r.id) === id
+      );
+
+      if (!recebedor || !recebedor.ativo) return;
+
+      if (acao === "redefinir-pin") {
+        redefinirPinRecebedor(recebedor);
         return;
       }
-      confirmarAcao("Remover recebedor", "Remover este recebedor?", function () {
-        const pos = recebedores.findIndex(r => r.matricula === matricula);
-        if (pos >= 0) recebedores.splice(pos, 1);
-        atualizarTudo();
-      });
-    });
-  }
+
+      if (acao !== "inativar-recebedor") return;
+
+      const confirmou = window.confirm( "Deseja inativar o recebedor " +  recebedor.nome + "?");
+
+      if (!confirmou) return;
+
+      const usuario = usuarioLogado;
+      salvandoRecebedor = true;
+
+      try {
+        await requisitarApi(
+          "/api/v1/recebedores/" +
+          recebedor.id + "/inativacao",
+          "PATCH"
+        );
+
+        if (usuario !== usuarioLogado) return;
+
+        await atualizarConsultaRecebedores();
+
+      } catch (erro) {
+        if (usuario !== usuarioLogado) return;
+
+        mostrarAviso(
+          "Erro na inativação",
+          "Não foi possível inativar o recebedor.");
+
+      } finally {
+        salvandoRecebedor = false;
+      }
+    }
+  );
+}
   document.querySelector("[data-action='salvar-recebedor']").addEventListener("click", salvarRecebedor);
 
   // ---------- ABA EQUIPES ----------
@@ -1701,44 +1941,165 @@ function telaPermitida(nome) {
   const tabelaEquipes = document.getElementById("tabela-equipes");
 
   function mostrarEquipes() {
-    if (!tabelaEquipes) return;
+  if (!tabelaEquipes) return;
 
-    const linhas = equipes.map(q => [
+  const linhas = equipesApi
+    .filter(q => q.ativo)
+    .map(q => [
       escapar(q.nome),
-      botaoAcao("Remover", "btn-outline-danger", "remover-equipe", q.nome)
+      botaoAcao(
+        "Inativar",
+        "btn-outline-danger",
+        "inativar-equipe",
+        q.id
+      )
     ]);
-    montarTabelaGerenciar(tabelaEquipes, ["Equipe", "Ações"], linhas);
+
+  montarTabelaGerenciar(
+    tabelaEquipes,
+    ["Equipe", "Ações"],
+    linhas
+  );
+}
+
+async function atualizarConsultaEquipes() {
+  if (!usuarioLogado ||
+      !["estoque", "operador"].includes(usuarioLogado.perfil)) return;
+
+  const usuario = usuarioLogado;
+  const versao = ++consultaEquipesVersao;
+
+  equipesApi = [];
+  mostrarEquipes();
+
+  try {
+    const dados = await carregarEquipes();
+
+    if (usuario !== usuarioLogado ||
+        versao !== consultaEquipesVersao) return;
+
+    equipesApi = dados;
+    mostrarEquipes();
+
+  } catch (erro) {
+    if (usuario !== usuarioLogado ||
+        versao !== consultaEquipesVersao) return;
+
+    console.error("Erro ao consultar equipes:", erro);
+
+    mostrarAviso(
+      "Erro na consulta",
+      "Não foi possível carregar as equipes."
+    );
+  }
+}
+
+  async function salvarEquipe() {
+  if (!usuarioLogado ||
+      usuarioLogado.perfil !== "estoque" ||
+      salvandoEquipe) return;
+
+  eqErro.textContent = "";
+
+  const nome = eqNome.value.trim();
+
+  if (!nome) {
+    eqErro.textContent = "Informe o nome da equipe.";
+    return;
   }
 
-  function salvarEquipe() {
-    eqErro.textContent = "";
+  if (nome.length > 120) {
+    eqErro.textContent =
+      "O nome deve ter até 120 caracteres.";
+    return;
+  }
 
-    const nome = eqNome.value.trim();
-    if (nome === "") {
-      eqErro.textContent = "Informe o nome da equipe.";
-      return;
-    }
-    if (equipes.some(q => q.nome.toLowerCase() === nome.toLowerCase())) {
-      eqErro.textContent = "Essa equipe já está cadastrada.";
-      return;
-    }
-    equipes.push({ nome: nome });
+  const usuario = usuarioLogado;
+  salvandoEquipe = true;
+
+  try {
+    await requisitarApi(
+      "/api/v1/equipes",
+      "POST",
+      { nome: nome }
+    );
+
+    if (usuario !== usuarioLogado) return;
+
     eqNome.value = "";
-    atualizarTudo();
+
+    await atualizarConsultaEquipes();
+
+  } catch (erro) {
+    if (usuario !== usuarioLogado) return;
+
+    eqErro.textContent =
+      erro.message === "HTTP 409"
+        ? "Essa equipe já está cadastrada."
+        : "Não foi possível cadastrar a equipe.";
+
+    console.error("Erro ao cadastrar equipe:", erro);
+
+  } finally {
+    salvandoEquipe = false;
   }
+}
 
   if (tabelaEquipes) {
-    tabelaEquipes.addEventListener("click", function (e) {
-      if (e.target.getAttribute("data-acao") !== "remover-equipe") return;
+  tabelaEquipes.addEventListener(
+    "click",
+    async function (e) {
 
-      const nome = e.target.getAttribute("data-id");
-      confirmarAcao("Remover equipe", "Remover a equipe " + nome + "? Empenhos antigos continuam com o nome dela.", function () {
-        const pos = equipes.findIndex(q => q.nome === nome);
-        if (pos >= 0) equipes.splice(pos, 1);
-        atualizarTudo();
-      });
-    });
-  }
+      if (!usuarioLogado ||
+          usuarioLogado.perfil !== "estoque" ||
+          salvandoEquipe) return;
+
+      const acao = e.target.getAttribute("data-acao");
+      const id = e.target.getAttribute("data-id");
+
+      if (acao !== "inativar-equipe" || !id) return;
+
+      const equipe = equipesApi.find(
+        q => String(q.id) === id
+      );
+
+      if (!equipe || !equipe.ativo) return;
+
+      const confirmou = window.confirm(
+        "Deseja inativar a equipe " + equipe.nome + "?"
+      );
+
+      if (!confirmou) return;
+
+      const usuario = usuarioLogado;
+      salvandoEquipe = true;
+
+      try {
+        await requisitarApi(
+          "/api/v1/equipes/" + equipe.id + "/inativacao",
+          "PATCH"
+        );
+
+        if (usuario !== usuarioLogado) return;
+
+        await atualizarConsultaEquipes();
+
+      } catch (erro) {
+        if (usuario !== usuarioLogado) return;
+
+        console.error("Erro ao inativar equipe:", erro);
+
+        mostrarAviso(
+          "Erro na inativação",
+          "Não foi possível inativar a equipe."
+        );
+
+      } finally {
+        salvandoEquipe = false;
+      }
+    }
+  );
+}
   document.querySelector("[data-action='salvar-equipe']").addEventListener("click", salvarEquipe);
 
   // ---------- ABA EXTRAVIOS ----------
@@ -1794,16 +2155,23 @@ function telaPermitida(nome) {
     mostrarExtravios();
   }
 
-      async function carregarGerenciamento() {
-    if (!usuarioLogado ||
-        usuarioLogado.perfil !== "estoque") return;
+  async function carregarGerenciamento() {
+  if (!usuarioLogado || usuarioLogado.perfil !== "estoque") return;
 
-    const usuario = usuarioLogado;
-    atualizarGerenciar();
-    await atualizarConsultaMateriais();
-    if (usuario !== usuarioLogado) return;
-    await atualizarConsultaItens();
-  }
+  const usuario = usuarioLogado;
+  atualizarGerenciar();
+
+  await atualizarConsultaMateriais();
+  if (usuario !== usuarioLogado) return;
+
+  await atualizarConsultaItens();
+  if (usuario !== usuarioLogado) return;
+
+  await atualizarConsultaEquipes();
+  if (usuario !== usuarioLogado) return;
+
+  await atualizarConsultaRecebedores();
+}
 
   // =====================================================================
   // TELA USUÁRIOS (só Adm do Sistema)

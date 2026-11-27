@@ -210,12 +210,12 @@
         <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-gerenciar-itens"></table></div>
       </div>
 
-      <!-- Aba recebedores (matrícula e senha) -->
+      <!-- Aba recebedores (matrícula e PIN) -->
       <div id="ger-recebedores" class="aba" hidden>
         <div class="row g-2 mb-3">
-          <div class="col-md-3"><input id="rec-nome" class="form-control" placeholder="Nome"></div>
-          <div class="col-md-3"><input id="rec-matricula" class="form-control" placeholder="Matrícula"></div>
-          <div class="col-md-3"><input id="rec-senha" type="password" class="form-control" placeholder="Senha" autocomplete="new-password"></div>
+          <div class="col-md-3"><input id="rec-nome" class="form-control" placeholder="Nome" maxlength="120"></div>
+          <div class="col-md-3"><input id="rec-matricula" class="form-control" placeholder="Matrícula" maxlength="40"></div>
+          <div class="col-md-3"><input id="rec-pin" type="password" class="form-control" placeholder="PIN de 6 dígitos" minlength="6" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password"></div>
           <div class="col-md-3"><button class="btn btn-primary" data-action="salvar-recebedor">Cadastrar recebedor</button></div>
         </div>
         <p id="rec-erro" class="text-danger small"></p>
