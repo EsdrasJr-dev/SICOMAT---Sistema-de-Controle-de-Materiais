@@ -53,22 +53,99 @@ document.addEventListener("DOMContentLoaded", function () {
   const usuarios = lerUsuarios();
   let usuarioLogado = null;
   let autorizacaoAtual = null;
+  let materiaisApi = [];
+  let consultaMateriaisVersao = 0;
+  let itensApi = [];
+  let itensDisponiveisApi = [];
+  let consultaItensVersao = 0;
+  let salvandoItem = false;
 
-  async function consultarConta(autorizacao) {
-  const resposta = await fetch("/api/v1/conta", {
-    method: "GET",
-    headers: {
-      "Authorization": autorizacao
-    },
-    credentials: "same-origin"
-  });
+    // Função central de comunicação com o backend
+  async function requisitarApi(
+    caminho,
+    metodo = "GET",
+    dados = null,
+    autorizacao = autorizacaoAtual
+  ) {
+    if (!autorizacao) {
+      throw new Error("Usuário não autenticado.");
+    }
 
-  if (!resposta.ok) {
-    throw new Error("HTTP " + resposta.status);
+    const headers = {
+      "Authorization": autorizacao,
+      "Accept": "application/json"
+    };
+
+    const opcoes = {
+      method: metodo,
+      headers: headers,
+      credentials: "same-origin"
+    };
+
+    // Obtém o token CSRF para operações de escrita
+    if (!["GET", "HEAD", "OPTIONS"].includes(metodo)) {
+      const csrf = await requisitarApi(
+        "/api/v1/csrf",
+        "GET",
+        null,
+        autorizacao
+      );
+
+      headers[csrf.headerName] = csrf.token;
+    }
+
+    // Converte os dados enviados para JSON
+    if (dados !== null) {
+      headers["Content-Type"] = "application/json";
+      opcoes.body = JSON.stringify(dados);
+    }
+
+    const resposta = await fetch(caminho, opcoes);
+
+    if (!resposta.ok) {
+      throw new Error("HTTP " + resposta.status);
+    }
+
+    // Trata respostas sem conteúdo
+    const conteudo = await resposta.text();
+
+    return conteudo ? JSON.parse(conteudo) : null;
   }
 
-  return await resposta.json();
-}
+  // Consulta os dados do usuário autenticado
+  async function consultarConta(autorizacao) {
+    return await requisitarApi(
+      "/api/v1/conta",
+      "GET",
+      null,
+      autorizacao
+    );
+  }
+
+    // Busca os materiais cadastrados no backend
+    async function carregarMateriais() {
+    const dados = await requisitarApi("/api/v1/materiais");
+
+    if (!Array.isArray(dados)) {
+      throw new Error("Resposta de materiais inválida.");
+    }
+
+    return dados;
+  }
+
+    async function carregarItens() {
+    const [todos, disponiveis] = await Promise.all([
+      requisitarApi("/api/v1/itens"),
+      requisitarApi("/api/v1/itens/disponiveis")
+    ]);
+
+    if (!Array.isArray(todos) ||
+        !Array.isArray(disponiveis)) {
+      throw new Error("Resposta de itens inválida.");
+    }
+
+    return { todos, disponiveis };
+  }
 
 function converterPerfil(perfilBackend) {
   const perfis = {
@@ -366,10 +443,10 @@ function telaPermitida(nome) {
 
     // Atualiza a tela toda vez que ela é aberta
     if (nome === "inicio") mostrarInicio();
-    if (nome === "consultar") mostrarConsultar();
+    if (nome === "consultar") atualizarConsultaMateriais();
     if (nome === "registrar") mostrarRegistrar();
     if (nome === "historico") renderizarHistorico();
-    if (nome === "gerenciar") atualizarGerenciar();
+    if (nome === "gerenciar") carregarGerenciamento();
     if (nome === "usuarios") mostrarUsuarios();
   }
 
@@ -478,10 +555,28 @@ function telaPermitida(nome) {
     }
   });
 
-  if (botaoSair) {
+    if (botaoSair) {
     botaoSair.addEventListener("click", function () {
       usuarioLogado = null;
       autorizacaoAtual = null;
+
+      // Limpa os dados recebidos da API
+      materiaisApi = [];
+      consultaMateriaisVersao++;
+      mostrarConsultar();
+      mostrarMateriais();
+      limparFormularioMaterial();
+      itensApi = [];
+      itensDisponiveisApi = [];
+      consultaItensVersao++;
+
+      mostrarItens();
+
+      preencherSelectMateriais();
+      itemMaterial.value = "";
+      itemPatrimonio.value = "";
+      itemErro.textContent = "";
+
       rascunho = [];
       telaSistema.hidden = true;
       telaLogin.hidden = false;
@@ -576,43 +671,94 @@ function telaPermitida(nome) {
   const buscaStatus = document.getElementById("busca-status");
   const tabelaMateriais = document.getElementById("tabela-materiais");
 
-  function mostrarConsultar() {
+    function mostrarConsultar() {
     if (!tabelaMateriais) return;
 
-    const secoes = [...new Set(materiais.map(m => m.secao))].sort();
-    preencherSelect(buscaSecao, "Todas as seções", secoes.map(s => ({ valor: s, texto: s })));
+    const secoes = [...new Set(
+      materiaisApi.map(m => m.secao || "Não informada")
+    )].sort();
+
+    preencherSelect(
+      buscaSecao,
+      "Todas as seções",
+      secoes.map(s => ({ valor: s, texto: s }))
+    );
 
     const texto = buscaTexto.value.trim().toLowerCase();
     const secao = buscaSecao.value;
     const status = buscaStatus.value;
-    const disponiveis = itensDisponiveis();
 
-    const linhas = materiais.map(m => {
-      const meus = itens.filter(i => i.codigo === m.codigo);
-      return {
-        codigo: m.codigo,
-        nome: m.nome,
-        secao: m.secao,
-        ativo: m.ativo,
-        total: meus.length,
-        disp: disponiveis.filter(i => i.codigo === m.codigo).length,
-        emUso: meus.filter(i => itemEmUso(i.patrimonio)).length
-      };
-    }).filter(l =>
-      (texto === "" || l.nome.toLowerCase().includes(texto) || l.codigo.toLowerCase().includes(texto)) &&
+    const linhas = materiaisApi.map(m => ({
+      codigo: m.codigo,
+      nome: m.nome,
+      secao: m.secao || "Não informada",
+      ativo: m.ativo,
+      total: m.quantidadeTotal,
+      disp: m.quantidadeDisponivel,
+      emUso: m.quantidadeEmpenhada ?? "—"
+    })).filter(l =>
+      (texto === "" ||
+        l.nome.toLowerCase().includes(texto) ||
+        l.codigo.toLowerCase().includes(texto)) &&
       (secao === "" || l.secao === secao) &&
-      (status === "" || (status === "disp" ? l.disp > 0 : l.disp === 0))
+      (status === "" ||
+        (status === "disp" ? l.disp > 0 : l.disp === 0))
     );
 
     montarTabela(tabelaMateriais, [
-      { titulo: "Código",       valor: l => l.codigo },
-      { titulo: "Material",     valor: l => l.nome },
-      { titulo: "Seção",        valor: l => l.secao },
-      { titulo: "Total",        valor: l => l.total },
-      { titulo: "Disponíveis",  valor: l => l.disp },
-      { titulo: "Em empenho",   valor: l => l.emUso },
-      { titulo: "Situação",     valor: l => (l.ativo ? "Ativo" : "Inativo") }
+      { titulo: "Código",      valor: l => l.codigo },
+      { titulo: "Material",    valor: l => l.nome },
+      { titulo: "Seção",       valor: l => l.secao },
+      { titulo: "Total",       valor: l => l.total },
+      { titulo: "Disponíveis", valor: l => l.disp },
+      { titulo: "Em empenho",  valor: l => l.emUso },
+      { titulo: "Situação",    valor: l => l.ativo ? "Ativo" : "Inativo" }
     ], linhas);
+  }
+
+    async function atualizarConsultaMateriais() {
+    if (!autorizacaoAtual) return;
+
+    const usuario = usuarioLogado;
+    const versao = ++consultaMateriaisVersao;
+
+    materiaisApi = [];
+    mostrarConsultar();
+    mostrarMateriais();
+    preencherSelectMateriais();
+    mostrarItens();
+
+    try {
+      const dados = await carregarMateriais();
+
+      if (usuario !== usuarioLogado ||
+          versao !== consultaMateriaisVersao) return;
+
+      materiaisApi = dados;
+
+      mostrarConsultar();
+      mostrarMateriais();
+      preencherSelectMateriais();
+      mostrarItens();
+
+    } catch (erro) {
+      if (usuario !== usuarioLogado ||
+          versao !== consultaMateriaisVersao) return;
+
+      materiaisApi = [];
+
+      mostrarConsultar();
+      mostrarMateriais();
+      preencherSelectMateriais();
+      mostrarItens();
+
+      console.error("Erro ao consultar materiais:", erro);
+
+      mostrarAviso(
+        "Erro na consulta",
+        "Não foi possível carregar os materiais do servidor."
+      );
+    }
   }
 
   if (buscaTexto) buscaTexto.addEventListener("input", mostrarConsultar);
@@ -1027,86 +1173,190 @@ function telaPermitida(nome) {
   const matErro = document.getElementById("mat-erro");
   const tabelaGerMateriais = document.getElementById("tabela-gerenciar-materiais");
 
-  let codigoEmEdicao = "";
+  let idEmEdicao = null;
+  let salvandoMaterial = false;
 
-  function mostrarMateriais() {
+    function mostrarMateriais() {
     if (!tabelaGerMateriais) return;
 
-    const linhas = [];
-    for (let i = 0; i < materiais.length; i++) {
-      const m = materiais[i];
-      const situacao = m.ativo ? "Ativo" : "Inativo";
-      const textoInativar = m.ativo ? "Inativar" : "Reativar";
+    const linhas = materiaisApi.map(m => [
+      escapar(m.codigo),
+      escapar(m.nome),
+      escapar(m.secao || "Não informada"),
+      m.ativo ? "Ativo" : "Inativo",
 
-      linhas.push([
-        escapar(m.codigo),
-        escapar(m.nome),
-        escapar(m.secao),
-        situacao,
-        botaoAcao("Editar", "btn-outline-primary", "editar-material", m.codigo) +
-        botaoAcao(textoInativar, "btn-outline-secondary", "ativar-material", m.codigo)
-      ]);
-    }
-    montarTabelaGerenciar(tabelaGerMateriais, ["Código", "Material", "Seção", "Situação", "Ações"], linhas);
+      m.ativo
+        ? botaoAcao(
+            "Editar",
+            "btn-outline-primary",
+            "editar-material",
+            m.id
+          ) +
+          botaoAcao(
+            "Inativar",
+            "btn-outline-secondary",
+            "ativar-material",
+            m.id
+          )
+        : "—"
+    ]);
+
+    montarTabelaGerenciar(
+      tabelaGerMateriais,
+      ["Código", "Material", "Seção", "Situação", "Ações"],
+      linhas
+    );
   }
 
-  function salvarMaterial() {
+    async function salvarMaterial() {
+    if (!usuarioLogado ||
+        usuarioLogado.perfil !== "estoque" ||
+        salvandoMaterial) return;
+
     matErro.textContent = "";
 
     const codigo = matCodigo.value.trim();
     const nome = matNome.value.trim();
     const secao = matSecao.value.trim();
 
-    if (codigo === "" || nome === "" || secao === "") {
+    if (!codigo || !nome || !secao) {
       matErro.textContent = "Preencha código, nome e seção.";
       return;
     }
-    if (codigoEmEdicao !== "") {
-      const m = acharMaterial(codigoEmEdicao);
-      if (m) {
-        m.nome = nome;
-        m.secao = secao;
-      }
-    } else {
-      if (acharMaterial(codigo)) {
-        matErro.textContent = "Já existe um material com esse código.";
-        return;
-      }
-      materiais.push({ codigo: codigo, nome: nome, secao: secao, ativo: true });
+
+    if (codigo.length > 40 ||
+        nome.length > 120 ||
+        secao.length > 80) {
+      matErro.textContent = "Limite de caracteres excedido.";
+      return;
     }
 
-    codigoEmEdicao = "";
+    const usuario = usuarioLogado;
+    const dados = { codigo, nome, secao };
+    const editando = idEmEdicao !== null;
+
+    salvandoMaterial = true;
+
+    try {
+      if (editando) {
+        await requisitarApi(
+          "/api/v1/materiais/" + idEmEdicao,
+          "PUT",
+          dados
+        );
+      } else {
+        await requisitarApi(
+          "/api/v1/materiais",
+          "POST",
+          dados
+        );
+      }
+
+      if (usuario !== usuarioLogado) return;
+
+      limparFormularioMaterial();
+
+      await atualizarConsultaMateriais();
+
+    } catch (erro) {
+      if (usuario !== usuarioLogado) return;
+
+      if (erro.message === "HTTP 409") {
+        matErro.textContent =
+          "Já existe um material com esse código.";
+      } else {
+        matErro.textContent =
+          "Não foi possível salvar o material.";
+      }
+
+      console.error("Erro ao salvar material:", erro);
+
+    } finally {
+      salvandoMaterial = false;
+    }
+  }
+
+    function limparFormularioMaterial() {
+    idEmEdicao = null;
     matCodigo.value = "";
     matCodigo.readOnly = false;
     matNome.value = "";
     matSecao.value = "";
-
-    atualizarTudo();
+    matErro.textContent = "";
   }
 
-  if (tabelaGerMateriais) {
-    tabelaGerMateriais.addEventListener("click", function (e) {
-      const acao = e.target.getAttribute("data-acao");
-      const codigo = e.target.getAttribute("data-id");
-      if (!acao) return;
+    if (tabelaGerMateriais) {
+    tabelaGerMateriais.addEventListener(
+      "click",
+      async function (e) {
 
-      const m = acharMaterial(codigo);
-      if (!m) return;
+        if (!usuarioLogado ||
+            usuarioLogado.perfil !== "estoque" ||
+            salvandoMaterial) return;
 
-      if (acao === "editar-material") {
-        codigoEmEdicao = m.codigo;
-        matCodigo.value = m.codigo;
-        matCodigo.readOnly = true;
-        matNome.value = m.nome;
-        matSecao.value = m.secao;
-        matErro.textContent = "";
-        matNome.focus();
+        const acao = e.target.getAttribute("data-acao");
+        const id = e.target.getAttribute("data-id");
+
+        if (!acao || !id) return;
+
+        const m = materiaisApi.find(
+          material => String(material.id) === id
+        );
+
+        if (!m || !m.ativo) return;
+
+        if (acao === "editar-material") {
+          idEmEdicao = m.id;
+
+          matCodigo.value = m.codigo;
+          matCodigo.readOnly = true;
+          matNome.value = m.nome;
+          matSecao.value = m.secao || "";
+          matErro.textContent = "";
+          matNome.focus();
+        }
+
+        if (acao === "ativar-material") {
+          const confirmou = window.confirm(
+            "Deseja realmente inativar este material?"
+          );
+
+          if (!confirmou) return;
+
+          const usuario = usuarioLogado;
+          salvandoMaterial = true;
+
+          try {
+            await requisitarApi(
+              "/api/v1/materiais/" + m.id + "/inativacao",
+              "PATCH"
+            );
+
+            if (usuario !== usuarioLogado) return;
+
+            limparFormularioMaterial();
+            await atualizarConsultaMateriais();
+            if (usuario !== usuarioLogado) return;
+            await atualizarConsultaItens();
+
+          } catch (erro) {
+            if (usuario !== usuarioLogado) return;
+
+            console.error("Erro ao inativar:", erro);
+
+            mostrarAviso(
+              "Erro na inativação",
+              erro.message === "HTTP 409"
+                ? "Verifique se existem empenhos pendentes."
+                : "Não foi possível inativar o material."
+            );
+
+          } finally {
+            salvandoMaterial = false;
+          }
+        }
       }
-      if (acao === "ativar-material") {
-        m.ativo = !m.ativo;
-        atualizarTudo();
-      }
-    });
+    );
   }
   document.querySelector("[data-action='salvar-material']").addEventListener("click", salvarMaterial);
 
@@ -1117,81 +1367,266 @@ function telaPermitida(nome) {
   const tabelaGerItens = document.getElementById("tabela-gerenciar-itens");
 
   // Select só com materiais ativos
-  function preencherSelectMateriais() {
+    function preencherSelectMateriais() {
     if (!itemMaterial) return;
 
-    const selecionado = itemMaterial.value;
-    let html = "";
+    const ativos = materiaisApi.filter(m => m.ativo);
 
-    for (let i = 0; i < materiais.length; i++) {
-      if (materiais[i].ativo) {
-        html += '<option value="' + escaparAttr(materiais[i].codigo) + '">' +
-          escapar(materiais[i].codigo + " – " + materiais[i].nome) + "</option>";
-      }
-    }
-    if (html === "") {
-      html = '<option value="">Cadastre um material primeiro</option>';
-    }
-    itemMaterial.innerHTML = html;
-    if (selecionado !== "") itemMaterial.value = selecionado;
+    preencherSelect(
+      itemMaterial,
+      ativos.length
+        ? "Selecione o material"
+        : "Nenhum material ativo disponível",
+      ativos.map(m => ({
+        valor: String(m.id),
+        texto: m.codigo + " – " + m.nome
+      }))
+    );
   }
 
-  function mostrarItens() {
+    function mostrarItens() {
     if (!tabelaGerItens) return;
 
-    const linhas = [];
-    for (let i = 0; i < itens.length; i++) {
-      const it = itens[i];
-      const emUso = itemEmUso(it.patrimonio);
-      const situacao = emUso ? "Em empenho" : (it.ativo ? "Disponível" : "Inativo");
-      const acao = emUso
-        ? '<span class="text-body-secondary small">—</span>'
-        : botaoAcao(it.ativo ? "Inativar" : "Liberar", "btn-outline-secondary", "ativar-item", it.patrimonio);
+    const statusItens = {
+      DISPONIVEL: "Disponível",
+      EMPENHADO: "Em empenho",
+      AVARIADO: "Avariado",
+      EXTRAVIADO: "Extraviado",
+      INATIVO: "Inativo"
+    };
 
-      linhas.push([
-        escapar(it.patrimonio),
-        escapar(nomeDoMaterial(it.codigo)),
-        situacao,
+    const linhas = itensApi.map(it => {
+
+      const livre = itensDisponiveisApi.some(
+        i => i.id === it.id
+      );
+
+      const material = materiaisApi.find(
+        m => m.codigo === it.codigoMaterial
+      );
+
+      let situacao = statusItens[it.status] || it.status;
+      let acao = "—";
+
+      if (it.status === "DISPONIVEL" && !livre) {
+        situacao = "Indisponível";
+      }
+
+      if (it.status === "DISPONIVEL" && livre) {
+        acao = botaoAcao(
+          "Inativar",
+          "btn-outline-secondary",
+          "inativar-item",
+          it.id
+        );
+      }
+
+      if (it.status === "AVARIADO") {
+        acao = botaoAcao(
+          "Inativar",
+          "btn-outline-secondary",
+          "inativar-item",
+          it.id
+        );
+
+        if (material && material.ativo) {
+          acao += botaoAcao(
+            "Liberar",
+            "btn-outline-success",
+            "liberar-item",
+            it.id
+          );
+        }
+      }
+
+      return [
+        escapar(it.numeroPatrimonio),
+        escapar(it.nomeMaterial),
+        escapar(situacao),
         acao
-      ]);
-    }
-    montarTabelaGerenciar(tabelaGerItens, ["Patrimônio", "Material", "Situação", "Ações"], linhas);
+      ];
+    });
+
+    montarTabelaGerenciar(
+      tabelaGerItens,
+      ["Patrimônio", "Material", "Situação", "Ações"],
+      linhas
+    );
   }
 
-  function salvarItem() {
+    async function atualizarConsultaItens() {
+    if (!usuarioLogado ||
+        usuarioLogado.perfil !== "estoque") return;
+
+    const usuario = usuarioLogado;
+    const versao = ++consultaItensVersao;
+
+    itensApi = [];
+    itensDisponiveisApi = [];
+    mostrarItens();
+
+    try {
+      const dados = await carregarItens();
+
+      if (usuario !== usuarioLogado ||
+          versao !== consultaItensVersao) return;
+
+      itensApi = dados.todos;
+      itensDisponiveisApi = dados.disponiveis;
+
+      mostrarItens();
+
+    } catch (erro) {
+      if (usuario !== usuarioLogado ||
+          versao !== consultaItensVersao) return;
+
+      console.error("Erro ao consultar itens:", erro);
+
+      mostrarAviso(
+        "Erro na consulta",
+        "Não foi possível carregar os itens."
+      );
+    }
+  }
+
+  async function salvarItem() {
+    if (!usuarioLogado ||
+        usuarioLogado.perfil !== "estoque" ||
+        salvandoItem) return;
+
     itemErro.textContent = "";
 
-    const codigo = itemMaterial.value;
+    const materialId = itemMaterial.value;
     const patrimonio = itemPatrimonio.value.trim();
 
-    if (codigo === "") {
-      itemErro.textContent = "Escolha um material (cadastre um na aba Materiais).";
+    const material = materiaisApi.find(
+      m => String(m.id) === materialId && m.ativo
+    );
+
+    if (!material) {
+      itemErro.textContent = "Escolha um material ativo.";
       return;
     }
-    if (patrimonio === "") {
+
+    if (!patrimonio) {
       itemErro.textContent = "Informe o número de patrimônio.";
       return;
     }
-    if (acharItem(patrimonio)) {
-      itemErro.textContent = "Esse patrimônio já está cadastrado.";
+
+    if (patrimonio.length > 80) {
+      itemErro.textContent =
+        "O patrimônio deve ter até 80 caracteres.";
       return;
     }
-    itens.push({ patrimonio: patrimonio, codigo: codigo, ativo: true });
-    itemPatrimonio.value = "";
-    atualizarTudo();
+
+    const usuario = usuarioLogado;
+    salvandoItem = true;
+
+    try {
+      await requisitarApi(
+        "/api/v1/materiais/" + materialId + "/itens",
+        "POST",
+        { numeroPatrimonio: patrimonio }
+      );
+
+      if (usuario !== usuarioLogado) return;
+
+      itemPatrimonio.value = "";
+
+      await atualizarConsultaMateriais();
+
+      if (usuario !== usuarioLogado) return;
+
+      await atualizarConsultaItens();
+
+    } catch (erro) {
+      if (usuario !== usuarioLogado) return;
+
+      itemErro.textContent =
+        erro.message === "HTTP 409"
+          ? "Esse patrimônio já está cadastrado."
+          : "Não foi possível cadastrar o item.";
+
+      console.error("Erro ao cadastrar item:", erro);
+
+        } finally {
+      salvandoItem = false;
+    }
   }
 
   if (tabelaGerItens) {
-    tabelaGerItens.addEventListener("click", function (e) {
-      if (e.target.getAttribute("data-acao") !== "ativar-item") return;
+    tabelaGerItens.addEventListener(
+      "click",
+      async function (e) {
 
-      const it = acharItem(e.target.getAttribute("data-id"));
-      if (!it) return;
+        if (!usuarioLogado ||
+            usuarioLogado.perfil !== "estoque" ||
+            salvandoItem) return;
 
-      it.ativo = !it.ativo;
-      atualizarTudo();
-    });
+        const acao = e.target.getAttribute("data-acao");
+        const id = e.target.getAttribute("data-id");
+
+        if (!acao || !id) return;
+
+        const item = itensApi.find(
+          it => String(it.id) === id
+        );
+
+        if (!item) return;
+
+        let operacao;
+        let mensagem;
+
+        if (acao === "inativar-item") {
+          operacao = "inativacao";
+          mensagem = "Deseja inativar este item?";
+
+        } else if (acao === "liberar-item") {
+          operacao = "liberacao";
+          mensagem = "Deseja liberar este item avariado?";
+
+        } else {
+          return;
+        }
+
+        if (!window.confirm(mensagem)) return;
+
+        const usuario = usuarioLogado;
+        salvandoItem = true;
+
+        try {
+          await requisitarApi(
+            "/api/v1/itens/" + item.id + "/" + operacao,
+            "PATCH"
+          );
+
+          if (usuario !== usuarioLogado) return;
+
+          await atualizarConsultaMateriais();
+
+          if (usuario !== usuarioLogado) return;
+
+          await atualizarConsultaItens();
+
+        } catch (erro) {
+          if (usuario !== usuarioLogado) return;
+
+          console.error("Erro ao alterar item:", erro);
+
+          mostrarAviso(
+            "Erro na operação",
+            erro.message === "HTTP 409"
+              ? "A situação atual do item não permite essa operação."
+              : "Não foi possível alterar o item."
+          );
+
+        } finally {
+          salvandoItem = false;
+        }
+      }
+    );
   }
+
   document.querySelector("[data-action='salvar-item']").addEventListener("click", salvarItem);
 
   // ---------- ABA RECEBEDORES ----------
@@ -1357,6 +1792,17 @@ function telaPermitida(nome) {
     mostrarRecebedores();
     mostrarEquipes();
     mostrarExtravios();
+  }
+
+      async function carregarGerenciamento() {
+    if (!usuarioLogado ||
+        usuarioLogado.perfil !== "estoque") return;
+
+    const usuario = usuarioLogado;
+    atualizarGerenciar();
+    await atualizarConsultaMateriais();
+    if (usuario !== usuarioLogado) return;
+    await atualizarConsultaItens();
   }
 
   // =====================================================================
