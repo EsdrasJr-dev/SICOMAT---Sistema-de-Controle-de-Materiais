@@ -70,6 +70,16 @@ document.addEventListener("DOMContentLoaded", function () {
   let salvandoEquipe = false;
   let salvandoRecebedor = false;
 
+  // Dados das movimentações recebidos da API
+  let empenhosPendentesApi = [];
+  let empenhosAbertosApi = [];
+
+  let consultaMovimentacoesVersao = 0;
+  let salvandoEmpenho = false;
+  let confirmandoEmpenho = false;
+  let cancelandoEmpenho = false;
+  let salvandoDevolucao = false;
+
     // Função central de comunicação com o backend
   async function requisitarApi(
     caminho,
@@ -174,6 +184,49 @@ async function carregarRecebedores() {
 
   if (!Array.isArray(dados)) {
     throw new Error("Resposta de recebedores inválida.");
+  }
+
+  return dados;
+}
+
+// Busca todas as páginas de uma consulta da API
+async function carregarTodasPaginas(caminho) {
+  const registros = [];
+  let pagina = 0;
+
+  while (true) {
+    const dados = await requisitarApi(caminho + "?pagina=" + pagina + "&tamanho=20");
+
+    if (!dados || !Array.isArray(dados.conteudo) || dados.pagina !== pagina || typeof dados.ultima !== "boolean") {throw new Error("Resposta paginada inválida.");
+    }
+
+    registros.push(...dados.conteudo);
+
+    if (dados.ultima) {
+      break;
+    }
+
+    pagina++;
+  }
+
+  return registros;
+}
+
+// Busca os empenhos pendentes
+async function carregarEmpenhosPendentes() {return await carregarTodasPaginas("/api/v1/empenhos/pendentes");
+}
+
+// Busca os empenhos abertos
+async function carregarEmpenhosAbertos() {
+  return await carregarTodasPaginas("/api/v1/empenhos/abertos");
+}
+
+// Busca os itens disponíveis para retirada
+async function carregarItensDisponiveis() {
+  const dados = await requisitarApi("/api/v1/itens/disponiveis");
+
+  if (!Array.isArray(dados)) {
+    throw new Error("Resposta de itens disponíveis inválida.");
   }
 
   return dados;
@@ -631,6 +684,10 @@ function telaPermitida(nome) {
 
       fecharModal();
 
+      empenhosPendentesApi = [];
+      empenhosAbertosApi = [];
+      consultaMovimentacoesVersao++;
+
       rascunho = [];
       telaSistema.hidden = true;
       telaLogin.hidden = false;
@@ -832,41 +889,83 @@ function telaPermitida(nome) {
   const devItens = document.getElementById("dev-itens");
   const devErro = document.getElementById("dev-erro");
 
-  let rascunho = []; // patrimônios já escolhidos para o novo empenho
+  let rascunho = []; // IDs dos itens escolhidos para o novo empenho
 
   function mostrarMensagem(texto, tipo) {
     if (!registrarMsg) return;
     registrarMsg.innerHTML = '<div class="alert alert-' + tipo + ' py-2 mb-0">' + escapar(texto) + "</div>";
   }
 
-  function mostrarRegistrar() {
-    if (!empRecebedor) return;
-
-    preencherSelect(empRecebedor, "Selecione o recebedor",
-      recebedores.map(r => ({ valor: r.matricula, texto: r.nome + " (" + r.matricula + ")" })));
-    preencherSelect(empEquipe, "Selecione a equipe",
-      equipes.map(q => ({ valor: q.nome, texto: q.nome })));
-
-    // Itens disponíveis que ainda não estão no rascunho
-    const livres = itensDisponiveis().filter(i => !rascunho.includes(i.patrimonio));
-    preencherSelect(empItem, livres.length ? "Selecione o item" : "Nenhum item disponível",
-      livres.map(i => ({ valor: i.patrimonio, texto: nomeDoMaterial(i.codigo) + " – " + i.patrimonio })));
-
-    mostrarRascunho();
-    mostrarPendentes();
-    mostrarSelectDevolucao();
+  async function atualizarMovimentacoes() {
+  if (!usuarioLogado || !["estoque", "operador"].includes(usuarioLogado.perfil)) {
+    return;
   }
+
+  const usuario = usuarioLogado;
+  const versao = ++consultaMovimentacoesVersao;
+
+  try {
+    const [listaRecebedores, listaEquipes, listaItens, listaPendentes, listaAbertos] = await Promise.all([carregarRecebedores(), carregarEquipes(), carregarItensDisponiveis(), carregarEmpenhosPendentes(), carregarEmpenhosAbertos()]);
+
+    if (usuario !== usuarioLogado || versao !== consultaMovimentacoesVersao) {
+      return;
+    }
+
+    recebedoresApi = listaRecebedores;
+    equipesApi = listaEquipes;
+    itensDisponiveisApi = listaItens;
+    empenhosPendentesApi = listaPendentes;
+    empenhosAbertosApi = listaAbertos;
+
+    mostrarRegistrar();
+
+  } catch (erro) {
+    if (usuario !== usuarioLogado || versao !== consultaMovimentacoesVersao) {
+      return;
+    }
+
+    console.error("Erro ao carregar movimentações:", erro);
+
+    mostrarAviso( "Erro na consulta", "Não foi possível carregar as movimentações.");
+  }
+}
+
+  function mostrarRegistrar() {
+  if (!empRecebedor) return;
+
+  preencherSelect(empRecebedor, "Selecione o recebedor", recebedoresApi.filter(r => r.ativo).map(r => ({valor: String(r.id), texto: r.nome + " (" + r.matricula + ")"}))
+  );
+
+  preencherSelect(empEquipe, "Selecione a equipe", equipesApi.filter(q => q.ativo).map(q => ({valor: String(q.id), texto: q.nome}))
+  );
+
+  const livres = itensDisponiveisApi.filter( i => !rascunho.includes(String(i.id)));
+
+  preencherSelect(empItem, livres.length ? "Selecione o item" : "Nenhum item disponível", livres.map(i => ({
+      valor: String(i.id),
+      texto: i.nomeMaterial + " – " + i.numeroPatrimonio}))
+  );
+
+  mostrarRascunho();
+  mostrarPendentes();
+  mostrarSelectDevolucao();
+}
 
   function mostrarRascunho() {
-    let html = "";
-    rascunho.forEach(p => {
-      const it = acharItem(p);
-      html += '<li class="list-group-item d-flex justify-content-between align-items-center">' +
-        "<span>" + escapar(nomeDoMaterial(it ? it.codigo : "") + " – " + p) + "</span>" +
-        botaoAcao("Remover", "btn-outline-danger", "remover-rascunho", p) + "</li>";
+  let html = "";
+
+  rascunho.forEach(id => {
+    const it = itensDisponiveisApi.find( i => String(i.id) === id);
+
+    const descricao = it ? it.nomeMaterial + " – " + it.numeroPatrimonio : "Item não está mais disponível";
+
+    html +=
+      '<li class="list-group-item d-flex justify-content-between align-items-center">' + "<span>" + escapar(descricao) + "</span>" +
+      botaoAcao("Remover", "btn-outline-danger", "remover-rascunho", id) + "</li>";
     });
-    empLista.innerHTML = html;
-  }
+
+  empLista.innerHTML = html;
+}
 
   document.querySelector("[data-action='add-item-empenho']").addEventListener("click", function () {
     empErro.textContent = "";
