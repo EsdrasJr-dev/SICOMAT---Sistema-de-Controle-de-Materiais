@@ -1,8 +1,18 @@
 document.addEventListener("DOMContentLoaded", function () {
 
   // =====================================================================
-  // ELEMENTOS DE LOGIN E PAINEL
+  // CONFIGURAÇÃO DO LOGIN  (é só aqui que você mexe)
   // =====================================================================
+  // false = login local, para testar sem back-end (admin / operador / sistema, senha 1234)
+  // true  = login feito pelo servidor (back-end Spring)
+  const USAR_SERVIDOR = false;
+
+  // Endereço do back-end:
+  //   ""                      -> quando você abre o sistema pelo próprio Spring (http://localhost:8080/index.html)
+  //   "http://localhost:8080" -> quando você abre pelo Live Server (o back-end precisa liberar o CORS)
+  const URL_BASE = "";
+
+  // ELEMENTOS DE LOGIN E PAINEL
   const telaLogin = document.getElementById("login");
   const telaSistema = document.getElementById("app");
   const campoLogin = document.getElementById("login-login");
@@ -15,9 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const inicioNome = document.getElementById("inicio-nome");
   const inicioAviso = document.getElementById("inicio-aviso");
 
-  // =====================================================================
   // USUÁRIOS (contas de acesso)
-  // =====================================================================
   const CH_USUARIOS = "sicomat_usuarios";
   const PERFIS = {
     operador: " (Operador)",
@@ -29,7 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const TELAS_PERMITIDAS = {
     operador: ["inicio", "consultar", "registrar", "historico", "relatorios", "perfil"],
     estoque: ["inicio", "consultar", "registrar", "historico", "relatorios", "gerenciar", "perfil"],
-    sistema: ["inicio", "perfil", "usuarios"]
+    sistema: ["inicio", "perfil", "usuarios", "funcionarios"]
   };
 
   function lerUsuarios() {
@@ -54,43 +62,42 @@ document.addEventListener("DOMContentLoaded", function () {
   let usuarioLogado = null;
   let autorizacaoAtual = null;
 
+  // Consulta a conta no servidor usando as credenciais informadas
   async function consultarConta(autorizacao) {
-  const resposta = await fetch("/api/v1/conta", {
-    method: "GET",
-    headers: {
-      "Authorization": autorizacao
-    },
-    credentials: "same-origin"
-  });
+    const resposta = await fetch(URL_BASE + "/api/v1/conta", {
+      method: "GET",
+      headers: {
+        "Authorization": autorizacao
+      },
+      credentials: "same-origin"
+    });
 
-  if (!resposta.ok) {
-    throw new Error("HTTP " + resposta.status);
+    if (!resposta.ok) {
+      throw new Error("HTTP " + resposta.status);
+    }
+
+    return await resposta.json();
   }
 
-  return await resposta.json();
-}
+  function converterPerfil(perfilBackend) {
+    const perfis = {
+      OPERADOR_ESTOQUE: "operador",
+      ADMINISTRADOR_ESTOQUE: "estoque",
+      ADMINISTRADOR_SISTEMA: "sistema"
+    };
 
-function converterPerfil(perfilBackend) {
-  const perfis = {
-    OPERADOR_ESTOQUE: "operador",
-    ADMINISTRADOR_ESTOQUE: "estoque",
-    ADMINISTRADOR_SISTEMA: "sistema"
-  };
+    return perfis[perfilBackend] || null;
+  }
 
-  return perfis[perfilBackend] || null;
-}
+  function telaPermitida(nome) {
+    return !!usuarioLogado &&
+      TELAS_PERMITIDAS[usuarioLogado.perfil].includes(nome);
+  }
 
-function telaPermitida(nome) {
-  return !!usuarioLogado &&
-    TELAS_PERMITIDAS[usuarioLogado.perfil].includes(nome);
-}
-
-  // =====================================================================
-  // DADOS DO ESTOQUE (ficam salvos no navegador)
-  // =====================================================================
+  // DADOS DO ESTOQUE
   const CH_MATERIAIS = "sicomat_materiais";
   const CH_ITENS = "sicomat_itens";
-  const CH_RECEBEDORES = "sicomat_recebedores";
+  const CH_FUNCIONARIOS = "sicomat_funcionarios";
   const CH_EQUIPES = "sicomat_equipes";
   const CH_EMPENHOS = "sicomat_empenhos";
 
@@ -109,19 +116,13 @@ function telaPermitida(nome) {
     }
   }
 
-  const materiais = lerLista(CH_MATERIAIS);   // { codigo, nome, secao, ativo }
-  const itens = lerLista(CH_ITENS);           // { patrimonio, codigo, ativo }
-  const recebedores = lerLista(CH_RECEBEDORES); // { nome, matricula, senha }
-  const equipes = lerLista(CH_EQUIPES);       // { nome }
-  // empenho: { id, data, dataConf, recebedor(matrícula), recebedorNome, equipe,
-  //            status: Pendente | Confirmado | Encerrado | Cancelado, criadoPor,
-  //            itens: [{ patrimonio, codigo, material,
-  //                      situacao: Em uso | Devolvido | Avariado | Extraviado | Cancelado, dataDev }] }
+  const materiais = lerLista(CH_MATERIAIS);       // codigo, nome, secao, ativo 
+  const itens = lerLista(CH_ITENS);               // patrimonio, codigo, ativo 
+  const funcionarios = lerLista(CH_FUNCIONARIOS); // nome, matricula, pin, ativo 
+  const equipes = lerLista(CH_EQUIPES);           // nome 
   const empenhos = lerLista(CH_EMPENHOS);
 
-  // =====================================================================
   // FUNÇÕES AUXILIARES
-  // =====================================================================
   function hojeISO() {
     const d = new Date();
     const mes = String(d.getMonth() + 1).padStart(2, "0");
@@ -160,7 +161,7 @@ function telaPermitida(nome) {
     tabela.innerHTML = cabecalho + corpo;
   }
 
-  // Tabela onde as células já são HTML pronto (para ter botões)
+  // Tabela onde as células já são HTML pronto
   function montarTabelaGerenciar(tabela, titulos, linhas) {
     let html = "<thead><tr>";
     for (let i = 0; i < titulos.length; i++) {
@@ -216,10 +217,10 @@ function telaPermitida(nome) {
     return empenhos.find(e => String(e.id) === String(id)) || null;
   }
 
-  // Um item está "em empenho" se está num empenho pendente ou confirmado
+  // Um item está "em empenho" se está num empenho confirmado e ainda não voltou
   function itemEmUso(patrimonio) {
     return empenhos.some(e =>
-      (e.status === "Pendente" || e.status === "Confirmado") &&
+      e.status === "Confirmado" &&
       e.itens.some(i => i.patrimonio === patrimonio && i.situacao === "Em uso")
     );
   }
@@ -259,13 +260,6 @@ function telaPermitida(nome) {
     return r;
   }
 
-  function temEmpenhoAtivo(matricula) {
-    return empenhos.some(e =>
-      e.recebedor === matricula &&
-      (e.status === "Pendente" || e.status === "Confirmado")
-    );
-  }
-
   // Marca o empenho como encerrado quando todos os itens foram resolvidos
   function encerrarSeCompleto(emp) {
     if (emp.status === "Confirmado" && !emp.itens.some(i => i.situacao === "Em uso")) {
@@ -273,7 +267,7 @@ function telaPermitida(nome) {
     }
   }
 
-  // Registra o resultado de um item (devolvido, avariado ou extraviado)
+  // Registra o resultado de um item
   function resolverItem(emp, patrimonio, situacao) {
     const it = emp.itens.find(i => i.patrimonio === patrimonio);
     if (!it) return;
@@ -293,20 +287,18 @@ function telaPermitida(nome) {
   function gravarTudo() {
     gravarLista(CH_MATERIAIS, materiais);
     gravarLista(CH_ITENS, itens);
-    gravarLista(CH_RECEBEDORES, recebedores);
+    gravarLista(CH_FUNCIONARIOS, funcionarios);
     gravarLista(CH_EQUIPES, equipes);
     gravarLista(CH_EMPENHOS, empenhos);
   }
 
-  // =====================================================================
   // JANELA DE MENSAGENS (modal)
-  // =====================================================================
   const modalEl = document.getElementById("modal");
   const modalTitulo = document.getElementById("modal-titulo");
   const modalCorpo = document.getElementById("modal-corpo");
   const modalRodape = document.getElementById("modal-rodape");
 
-  // botoes = lista de { texto, classe, aoClicar, manter }
+  // botoes = lista de texto, classe, aoClicar, manter
   // manter = true: o botão NÃO fecha a janela sozinho
   function abrirModal(titulo, corpoHTML, botoes) {
     if (!modalEl || !window.bootstrap) return;
@@ -345,9 +337,7 @@ function telaPermitida(nome) {
     ]);
   }
 
-  // =====================================================================
   // NAVEGAÇÃO PRINCIPAL
-  // =====================================================================
   function mostrarTela(nome) {
     const alvo = document.getElementById("tela-" + nome);
 
@@ -371,6 +361,7 @@ function telaPermitida(nome) {
     if (nome === "historico") renderizarHistorico();
     if (nome === "gerenciar") atualizarGerenciar();
     if (nome === "usuarios") mostrarUsuarios();
+    if (nome === "funcionarios") mostrarFuncionarios();
   }
 
   document.querySelectorAll("[data-go]").forEach(link => {
@@ -385,7 +376,7 @@ function telaPermitida(nome) {
     });
   });
 
-  // Atualiza todas as telas de uma vez (depois de qualquer mudança)
+  // Atualiza todas as telas de uma vez depois de qualquer mudança
   function atualizarTudo() {
     gravarTudo();
     mostrarInicio();
@@ -396,9 +387,8 @@ function telaPermitida(nome) {
     atualizarGerenciar();
   }
 
-  // =====================================================================
-  // LOGIN
-  // =====================================================================
+ 
+  // LOGIN  local ou pelo servidor, conforme USAR_SERVIDOR
   async function fazerLogin() {
     const login = campoLogin.value.trim();
     const senha = campoSenha.value;
@@ -410,6 +400,23 @@ function telaPermitida(nome) {
       return;
     }
 
+    // MODO TESTE: confere na lista local, sem back-end
+    if (!USAR_SERVIDOR) {
+      const u = usuarios.find(x => x.login === login && x.senha === senha);
+
+      if (!u) {
+        mensagemErro.textContent = "Usuário ou senha incorretos.";
+        return;
+      }
+      if (!u.ativo) {
+        mensagemErro.textContent = "Este usuário está inativo.";
+        return;
+      }
+      logarUsuario(u);
+      return;
+    }
+
+    // MODO SERVIDOR: confere no back-end
     const credenciais = new TextEncoder().encode(login + ":" + senha);
     const autorizacao = "Basic " + btoa(
       String.fromCharCode(...credenciais)
@@ -420,11 +427,16 @@ function telaPermitida(nome) {
     try {
       conta = await consultarConta(autorizacao);
     } catch (erro) {
-    mensagemErro.textContent =
-     erro.message === "HTTP 401"
-       ? "Matrícula ou senha incorretas."
-        : "Não foi possível autenticar. Verifique a conexão com o servidor.";
-    return;
+      console.error("Falha no login:", erro);
+
+      if (erro.message === "HTTP 401") {
+        mensagemErro.textContent = "Matrícula ou senha incorretas.";
+      } else if (erro.message === "HTTP 404") {
+        mensagemErro.textContent = "API não encontrada. Abra o sistema pelo servidor do back-end, não pelo Live Server.";
+      } else {
+        mensagemErro.textContent = "Não foi possível conectar ao servidor. Verifique se o back-end está rodando.";
+      }
+      return;
     }
 
     const perfil = converterPerfil(conta.perfil);
@@ -435,9 +447,9 @@ function telaPermitida(nome) {
     }
 
     const u = {
-       ...conta,
-        login: conta.matricula,
-        perfil: perfil
+      ...conta,
+      login: conta.matricula,
+      perfil: perfil
     };
 
     autorizacaoAtual = autorizacao;
@@ -483,6 +495,10 @@ function telaPermitida(nome) {
       usuarioLogado = null;
       autorizacaoAtual = null;
       rascunho = [];
+      if (empMatricula) empMatricula.value = "";
+      if (empPin) empPin.value = "";
+      if (devMatricula) devMatricula.value = "";
+      if (devPin) devPin.value = "";
       telaSistema.hidden = true;
       telaLogin.hidden = false;
       campoLogin.value = "";
@@ -491,9 +507,7 @@ function telaPermitida(nome) {
     });
   }
 
-  // =====================================================================
-  // ABAS (Registrar Movimentação e Gerenciar Materiais)
-  // =====================================================================
+  // Abas Registrar Movimentação e Gerenciar Materiais
   const registrarMsg = document.getElementById("registrar-msg");
 
   document.querySelectorAll(".nav-tabs .nav-link").forEach(botao => {
@@ -513,9 +527,7 @@ function telaPermitida(nome) {
     });
   });
 
-  // =====================================================================
   // PAINEL DO INÍCIO
-  // =====================================================================
   const painelVisao = document.getElementById("painel-visao");
   const painelEquipe = document.getElementById("painel-equipe");
   const painelRecebedor = document.getElementById("painel-recebedor");
@@ -532,18 +544,17 @@ function telaPermitida(nome) {
     if (!tabelaInicio) return;
 
     // Cartões de resumo
-    const pendentes = empenhos.filter(e => e.status === "Pendente").length;
     inicioResumo.innerHTML =
       cartao("Itens em empenho aberto", listarItens("Em uso").length) +
-      cartao("Empenhos pendentes", pendentes) +
       cartao("Itens disponíveis", itensDisponiveis().length) +
+      cartao("Itens avariados", listarItens("Avariado").length) +
       cartao("Itens extraviados", listarItens("Extraviado").length);
 
     // Filtros
     preencherSelect(painelEquipe, "Todas as equipes",
       equipes.map(q => ({ valor: q.nome, texto: q.nome })));
     preencherSelect(painelRecebedor, "Todos os recebedores",
-      recebedores.map(r => ({ valor: r.matricula, texto: r.nome })));
+      funcionarios.map(f => ({ valor: f.matricula, texto: f.nome })));
 
     const situacao = painelVisao.value === "extraviados" ? "Extraviado" : "Em uso";
     const equipe = painelEquipe.value;
@@ -568,9 +579,7 @@ function telaPermitida(nome) {
     if (sel) sel.addEventListener("change", mostrarInicio);
   });
 
-  // =====================================================================
   // CONSULTAR MATERIAIS
-  // =====================================================================
   const buscaTexto = document.getElementById("busca-texto");
   const buscaSecao = document.getElementById("busca-secao");
   const buscaStatus = document.getElementById("busca-status");
@@ -619,31 +628,28 @@ function telaPermitida(nome) {
   if (buscaSecao) buscaSecao.addEventListener("change", mostrarConsultar);
   if (buscaStatus) buscaStatus.addEventListener("change", mostrarConsultar);
 
-  // =====================================================================
   // REGISTRAR MOVIMENTAÇÃO
-  // =====================================================================
-  const empRecebedor = document.getElementById("emp-recebedor");
   const empEquipe = document.getElementById("emp-equipe");
   const empItem = document.getElementById("emp-item");
   const empLista = document.getElementById("emp-lista");
+  const empMatricula = document.getElementById("emp-matricula");
+  const empPin = document.getElementById("emp-pin");
   const empErro = document.getElementById("emp-erro");
-  const tabelaPendentes = document.getElementById("tabela-pendentes");
   const devEmpenho = document.getElementById("dev-empenho");
   const devItens = document.getElementById("dev-itens");
   const devErro = document.getElementById("dev-erro");
+  const devMatricula = document.getElementById("dev-matricula");
+  const devPin = document.getElementById("dev-pin");
 
-  let rascunho = []; // patrimônios já escolhidos para o novo empenho
-
+  let rascunho = [];
   function mostrarMensagem(texto, tipo) {
     if (!registrarMsg) return;
     registrarMsg.innerHTML = '<div class="alert alert-' + tipo + ' py-2 mb-0">' + escapar(texto) + "</div>";
   }
 
   function mostrarRegistrar() {
-    if (!empRecebedor) return;
+    if (!empEquipe) return;
 
-    preencherSelect(empRecebedor, "Selecione o recebedor",
-      recebedores.map(r => ({ valor: r.matricula, texto: r.nome + " (" + r.matricula + ")" })));
     preencherSelect(empEquipe, "Selecione a equipe",
       equipes.map(q => ({ valor: q.nome, texto: q.nome })));
 
@@ -653,7 +659,6 @@ function telaPermitida(nome) {
       livres.map(i => ({ valor: i.patrimonio, texto: nomeDoMaterial(i.codigo) + " – " + i.patrimonio })));
 
     mostrarRascunho();
-    mostrarPendentes();
     mostrarSelectDevolucao();
   }
 
@@ -684,35 +689,53 @@ function telaPermitida(nome) {
     mostrarRegistrar();
   });
 
+  // O funcionário se identifica com matrícula e PIN se estiver certo o material é liberado
   function criarEmpenho() {
     empErro.textContent = "";
 
-    const matricula = empRecebedor.value;
     const equipe = empEquipe.value;
+    const matricula = empMatricula.value.trim();
+    const pin = empPin.value.trim();
 
-    if (matricula === "" || equipe === "") {
-      empErro.textContent = "Escolha o recebedor e a equipe.";
-      return;
-    }
     if (rascunho.length === 0) {
       empErro.textContent = "Adicione pelo menos um item.";
       return;
     }
+    if (equipe === "") {
+      empErro.textContent = "Escolha a equipe.";
+      return;
+    }
+    if (matricula === "" || pin === "") {
+      empErro.textContent = "Informe a matrícula e o PIN do funcionário.";
+      return;
+    }
+
+    const func = funcionarios.find(f => f.matricula === matricula && f.pin === pin);
+    if (!func) {
+      empPin.value = "";
+      empErro.textContent = "Matrícula ou PIN incorretos.";
+      return;
+    }
+    if (!func.ativo) {
+      empPin.value = "";
+      empErro.textContent = "Este funcionário está inativo. Procure o Adm do Sistema.";
+      return;
+    }
+
     const livres = itensDisponiveis().map(i => i.patrimonio);
     if (rascunho.some(p => !livres.includes(p))) {
       empErro.textContent = "Algum item escolhido não está mais disponível. Revise a lista.";
       return;
     }
 
-    const rec = recebedores.find(r => r.matricula === matricula);
     const novo = {
       id: proximoId(),
       data: hojeISO(),
-      dataConf: "",
-      recebedor: matricula,
-      recebedorNome: rec ? rec.nome : matricula,
+      dataConf: hojeISO(),
+      recebedor: func.matricula,
+      recebedorNome: func.nome,
       equipe: equipe,
-      status: "Pendente",
+      status: "Confirmado",
       criadoPor: usuarioLogado ? usuarioLogado.nome : "",
       itens: rascunho.map(p => {
         const it = acharItem(p);
@@ -720,83 +743,15 @@ function telaPermitida(nome) {
       })
     };
     empenhos.push(novo);
+
     rascunho = [];
+    empMatricula.value = "";
+    empPin.value = "";
     atualizarTudo();
-    mostrarMensagem("Empenho nº " + novo.id + " criado. Vá em \"Empenhos pendentes\" para o recebedor confirmar.", "success");
+    mostrarMensagem("Material liberado para " + func.nome + " (empenho nº " + novo.id + ").", "success");
   }
 
-  // --- Empenhos pendentes ---
-  function mostrarPendentes() {
-    if (!tabelaPendentes) return;
-
-    const linhas = empenhos.filter(e => e.status === "Pendente").map(e => [
-      escapar("Nº " + e.id),
-      escapar(formatarData(e.data)),
-      escapar(e.recebedorNome),
-      escapar(e.equipe),
-      escapar(textoItens(e)),
-      botaoAcao("Confirmar", "btn-success", "confirmar-empenho", e.id) +
-      botaoAcao("Cancelar", "btn-outline-danger", "cancelar-empenho", e.id)
-    ]);
-    montarTabelaGerenciar(tabelaPendentes, ["Empenho", "Data", "Recebedor", "Equipe", "Itens", "Ações"], linhas);
-  }
-
-  function pedirConfirmacao(emp) {
-    const corpo =
-      '<p class="mb-1">Recebedor: <strong>' + escapar(emp.recebedorNome) + "</strong></p>" +
-      '<p class="mb-3">Itens: ' + escapar(textoItens(emp)) + "</p>" +
-      '<div class="mb-2"><label class="form-label" for="conf-matricula">Matrícula</label>' +
-      '<input id="conf-matricula" class="form-control" autocomplete="off"></div>' +
-      '<div class="mb-2"><label class="form-label" for="conf-senha">Senha</label>' +
-      '<input id="conf-senha" type="password" class="form-control" autocomplete="new-password"></div>' +
-      '<p id="conf-erro" class="text-danger small mb-0"></p>';
-
-    abrirModal("Confirmar empenho nº " + emp.id, corpo, [
-      { texto: "Cancelar", classe: "btn-outline-secondary" },
-      {
-        texto: "Confirmar recebimento",
-        classe: "btn-success",
-        manter: true,
-        aoClicar: function () {
-          const matricula = document.getElementById("conf-matricula").value.trim();
-          const senha = document.getElementById("conf-senha").value.trim();
-          const erro = document.getElementById("conf-erro");
-          const rec = recebedores.find(r => r.matricula === emp.recebedor);
-
-          if (!rec || matricula !== rec.matricula || senha !== rec.senha) {
-            erro.textContent = "Matrícula ou senha incorretas.";
-            return;
-          }
-          emp.status = "Confirmado";
-          emp.dataConf = hojeISO();
-          fecharModal();
-          atualizarTudo();
-          mostrarMensagem("Empenho nº " + emp.id + " confirmado por " + emp.recebedorNome + ".", "success");
-        }
-      }
-    ]);
-  }
-
-  tabelaPendentes.addEventListener("click", function (e) {
-    const acao = e.target.getAttribute("data-acao");
-    const emp = acharEmpenho(e.target.getAttribute("data-id"));
-    if (!acao || !emp) return;
-
-    if (acao === "confirmar-empenho") pedirConfirmacao(emp);
-
-    if (acao === "cancelar-empenho") {
-      confirmarAcao("Cancelar empenho",
-        "Cancelar o empenho nº " + emp.id + "? Os itens voltam a ficar disponíveis.",
-        function () {
-          emp.status = "Cancelado";
-          emp.itens.forEach(i => (i.situacao = "Cancelado"));
-          atualizarTudo();
-          mostrarMensagem("Empenho nº " + emp.id + " cancelado.", "warning");
-        });
-    }
-  });
-
-  // --- Devolução ---
+  // Devolução
   function empenhosComPendencia() {
     return empenhos.filter(e => e.status === "Confirmado" && e.itens.some(i => i.situacao === "Em uso"));
   }
@@ -833,6 +788,7 @@ function telaPermitida(nome) {
 
   if (devEmpenho) devEmpenho.addEventListener("change", mostrarItensDevolucao);
 
+  // O funcionário que retirou o material se identifica com matrícula e PIN para devolver
   function registrarDevolucao() {
     devErro.textContent = "";
 
@@ -841,6 +797,7 @@ function telaPermitida(nome) {
       devErro.textContent = "Escolha um empenho.";
       return;
     }
+
     const escolhas = [];
     devItens.querySelectorAll(".dev-cond").forEach(sel => {
       if (sel.value !== "") escolhas.push({ pat: sel.getAttribute("data-pat"), situacao: sel.value });
@@ -849,21 +806,42 @@ function telaPermitida(nome) {
       devErro.textContent = "Escolha a condição de pelo menos um item.";
       return;
     }
+
+    const matricula = devMatricula.value.trim();
+    const pin = devPin.value.trim();
+    if (matricula === "" || pin === "") {
+      devErro.textContent = "Informe a matrícula e o PIN do funcionário.";
+      return;
+    }
+
+    const func = funcionarios.find(f => f.matricula === matricula && f.pin === pin);
+    if (!func) {
+      devPin.value = "";
+      devErro.textContent = "Matrícula ou PIN incorretos.";
+      return;
+    }
+    if (func.matricula !== emp.recebedor) {
+      devPin.value = "";
+      devErro.textContent = "Esta matrícula não é a do funcionário que retirou este empenho.";
+      return;
+    }
+
     escolhas.forEach(c => resolverItem(emp, c.pat, c.situacao));
+    devMatricula.value = "";
+    devPin.value = "";
     atualizarTudo();
     mostrarMensagem(
       emp.status === "Encerrado"
-        ? "Devolução registrada. O empenho nº " + emp.id + " foi encerrado."
-        : "Devolução registrada. Ainda há itens em aberto no empenho nº " + emp.id + ".",
+        ? "Devolução registrada por " + func.nome + ". O empenho nº " + emp.id + " foi encerrado."
+        : "Devolução registrada por " + func.nome + ". Ainda há itens em aberto no empenho nº " + emp.id + ".",
       "success");
   }
 
   document.querySelector("[data-action='criar-empenho']").addEventListener("click", criarEmpenho);
   document.querySelector("[data-action='registrar-devolucao']").addEventListener("click", registrarDevolucao);
 
-  // =====================================================================
+
   // HISTÓRICO
-  // =====================================================================
   const histTipo = document.getElementById("hist-tipo");
   const histRecebedor = document.getElementById("hist-recebedor");
   const tabelaHistorico = document.getElementById("tabela-historico");
@@ -885,7 +863,7 @@ function telaPermitida(nome) {
         }
       });
     });
-    // mais recentes primeiro (o sort é estável, então a ordem do dia é mantida)
+    // mais recentes primeiro
     return ev.reverse().sort((a, b) => b.data.localeCompare(a.data));
   }
 
@@ -920,7 +898,7 @@ function telaPermitida(nome) {
   if (histTipo) histTipo.addEventListener("change", renderizarHistorico);
   if (histRecebedor) histRecebedor.addEventListener("change", renderizarHistorico);
 
-  // Detalhes: ao clicar numa linha do histórico, mostra os dados dela
+  // ao clicar numa linha do histórico, mostra os dados dela
   if (tabelaHistorico) {
     tabelaHistorico.addEventListener("click", function (e) {
       const linha = e.target.closest("tbody tr");
@@ -943,9 +921,9 @@ function telaPermitida(nome) {
     });
   }
 
-  // =====================================================================
+
   // RELATÓRIOS
-  // =====================================================================
+
   const relTipo = document.getElementById("rel-tipo");
   const tabelaRelatorio = document.getElementById("tabela-relatorio");
   const botaoGerar = document.querySelector("[data-action='gerar-relatorio']");
@@ -1016,11 +994,8 @@ function telaPermitida(nome) {
   if (botaoGerar) botaoGerar.addEventListener("click", gerarRelatorio);
   if (botaoImprimir) botaoImprimir.addEventListener("click", function () { window.print(); });
 
-  // =====================================================================
   // GERENCIAR MATERIAIS
-  // =====================================================================
-
-  // ---------- ABA MATERIAIS ----------
+  // ABA MATERIAIS
   const matCodigo = document.getElementById("mat-codigo");
   const matNome = document.getElementById("mat-nome");
   const matSecao = document.getElementById("mat-secao");
@@ -1110,7 +1085,7 @@ function telaPermitida(nome) {
   }
   document.querySelector("[data-action='salvar-material']").addEventListener("click", salvarMaterial);
 
-  // ---------- ABA ITENS ----------
+  // ABA ITENS
   const itemMaterial = document.getElementById("item-material");
   const itemPatrimonio = document.getElementById("item-patrimonio");
   const itemErro = document.getElementById("item-erro");
@@ -1194,73 +1169,7 @@ function telaPermitida(nome) {
   }
   document.querySelector("[data-action='salvar-item']").addEventListener("click", salvarItem);
 
-  // ---------- ABA RECEBEDORES ----------
-  const recNome = document.getElementById("rec-nome");
-  const recMatricula = document.getElementById("rec-matricula");
-  const recSenha = document.getElementById("rec-senha");
-  const recErro = document.getElementById("rec-erro");
-  const tabelaRecebedores = document.getElementById("tabela-recebedores");
-
-  function mostrarRecebedores() {
-    if (!tabelaRecebedores) return;
-
-    const linhas = [];
-    for (let i = 0; i < recebedores.length; i++) {
-      const r = recebedores[i];
-      linhas.push([
-        escapar(r.nome),
-        escapar(r.matricula),
-        botaoAcao("Remover", "btn-outline-danger", "remover-recebedor", r.matricula)
-      ]);
-    }
-    montarTabelaGerenciar(tabelaRecebedores, ["Nome", "Matrícula", "Ações"], linhas);
-  }
-
-  function salvarRecebedor() {
-    recErro.textContent = "";
-
-    const nome = recNome.value.trim();
-    const matricula = recMatricula.value.trim();
-    const senha = recSenha.value.trim();
-
-    if (nome === "" || matricula === "" || senha === "") {
-      recErro.textContent = "Preencha nome, matrícula e senha.";
-      return;
-    }
-    if (recebedores.some(r => r.matricula === matricula)) {
-      recErro.textContent = "Essa matrícula já está cadastrada.";
-      return;
-    }
-
-    recebedores.push({ nome: nome, matricula: matricula, senha: senha });
-
-    recNome.value = "";
-    recMatricula.value = "";
-    recSenha.value = "";
-
-    atualizarTudo();
-  }
-
-  if (tabelaRecebedores) {
-    tabelaRecebedores.addEventListener("click", function (e) {
-      if (e.target.getAttribute("data-acao") !== "remover-recebedor") return;
-
-      const matricula = e.target.getAttribute("data-id");
-
-      if (temEmpenhoAtivo(matricula)) {
-        mostrarAviso("Não é possível remover", "Este recebedor tem empenho pendente ou em aberto.");
-        return;
-      }
-      confirmarAcao("Remover recebedor", "Remover este recebedor?", function () {
-        const pos = recebedores.findIndex(r => r.matricula === matricula);
-        if (pos >= 0) recebedores.splice(pos, 1);
-        atualizarTudo();
-      });
-    });
-  }
-  document.querySelector("[data-action='salvar-recebedor']").addEventListener("click", salvarRecebedor);
-
-  // ---------- ABA EQUIPES ----------
+  // ABA EQUIPES
   const eqNome = document.getElementById("eq-nome");
   const eqErro = document.getElementById("eq-erro");
   const tabelaEquipes = document.getElementById("tabela-equipes");
@@ -1306,7 +1215,7 @@ function telaPermitida(nome) {
   }
   document.querySelector("[data-action='salvar-equipe']").addEventListener("click", salvarEquipe);
 
-  // ---------- ABA EXTRAVIOS ----------
+  // ABA EXTRAVIOS
   const tabelaExtravios = document.getElementById("tabela-extravios");
 
   function mostrarExtravios() {
@@ -1354,15 +1263,12 @@ function telaPermitida(nome) {
     mostrarMateriais();
     preencherSelectMateriais();
     mostrarItens();
-    mostrarRecebedores();
     mostrarEquipes();
     mostrarExtravios();
   }
 
-  // =====================================================================
-  // TELA USUÁRIOS (só Adm do Sistema)
-  // =====================================================================
-  const usrNome = document.getElementById("usr-nome");
+   // Tela usuarios só Adm ve do Sistema
+   const usrNome = document.getElementById("usr-nome");
   const usrLogin = document.getElementById("usr-login");
   const usrSenha = document.getElementById("usr-senha");
   const usrPerfil = document.getElementById("usr-perfil");
@@ -1439,9 +1345,128 @@ function telaPermitida(nome) {
   }
   document.querySelector("[data-action='salvar-usuario']").addEventListener("click", salvarUsuario);
 
-  // =====================================================================
+  // tela funcionário matrícula e PIN
+  const funcNome = document.getElementById("func-nome");
+  const funcMatricula = document.getElementById("func-matricula");
+  const funcPin = document.getElementById("func-pin");
+  const funcErro = document.getElementById("func-erro");
+  const tabelaFuncionarios = document.getElementById("tabela-funcionarios");
+
+  // pin de 4 a 6 números
+  function pinValido(pin) {
+    return /^\d{4,6}$/.test(pin);
+  }
+
+  // Os campos de PIN só aceitam números
+  [funcPin, empPin, devPin].forEach(campo => {
+    if (campo) {
+      campo.addEventListener("input", function () {
+        campo.value = campo.value.replace(/\D/g, "");
+      });
+    }
+  });
+
+  function mostrarFuncionarios() {
+    if (!tabelaFuncionarios) return;
+
+    const linhas = funcionarios.map(f => [
+      escapar(f.nome),
+      escapar(f.matricula),
+      f.ativo ? "Ativo" : "Inativo",
+      botaoAcao("Redefinir PIN", "btn-outline-primary", "redefinir-pin", f.matricula) +
+      botaoAcao(f.ativo ? "Inativar" : "Reativar", "btn-outline-secondary", "ativar-funcionario", f.matricula)
+    ]);
+    montarTabelaGerenciar(tabelaFuncionarios, ["Nome", "Matrícula", "Situação", "Ações"], linhas);
+  }
+
+  function salvarFuncionario() {
+    funcErro.className = "small text-danger";
+    funcErro.textContent = "";
+
+    const nome = funcNome.value.trim();
+    const matricula = funcMatricula.value.trim();
+    const pin = funcPin.value.trim();
+
+    if (nome === "" || matricula === "" || pin === "") {
+      funcErro.textContent = "Preencha nome, matrícula e PIN.";
+      return;
+    }
+    if (!pinValido(pin)) {
+      funcErro.textContent = "O PIN deve ter de 4 a 6 números.";
+      return;
+    }
+    if (funcionarios.some(f => f.matricula === matricula)) {
+      funcErro.textContent = "Essa matrícula já está cadastrada.";
+      return;
+    }
+
+    funcionarios.push({ nome: nome, matricula: matricula, pin: pin, ativo: true });
+    gravarLista(CH_FUNCIONARIOS, funcionarios);
+
+    funcNome.value = "";
+    funcMatricula.value = "";
+    funcPin.value = "";
+
+    funcErro.className = "small text-success";
+    funcErro.textContent = "Funcionário cadastrado com sucesso.";
+    mostrarFuncionarios();
+  }
+
+  function pedirNovoPin(f) {
+    const corpo =
+      '<label class="form-label" for="novo-pin">Novo PIN (4 a 6 números)</label>' +
+      '<input id="novo-pin" type="password" inputmode="numeric" maxlength="6" class="form-control" autocomplete="new-password">' +
+      '<p id="novo-pin-erro" class="text-danger small mt-2 mb-0"></p>';
+
+    abrirModal("Redefinir PIN de " + f.nome, corpo, [
+      { texto: "Cancelar", classe: "btn-outline-secondary" },
+      {
+        texto: "Salvar PIN",
+        classe: "btn-primary",
+        manter: true,
+        aoClicar: function () {
+          const pin = document.getElementById("novo-pin").value.trim();
+          if (!pinValido(pin)) {
+            document.getElementById("novo-pin-erro").textContent = "O PIN deve ter de 4 a 6 números.";
+            return;
+          }
+          f.pin = pin;
+          gravarLista(CH_FUNCIONARIOS, funcionarios);
+          fecharModal();
+          funcErro.className = "small text-success";
+          funcErro.textContent = "PIN de " + f.nome + " redefinido com sucesso.";
+        }
+      }
+    ]);
+
+    // Só aceita números no campo do modal
+    const campo = document.getElementById("novo-pin");
+    if (campo) {
+      campo.addEventListener("input", function () {
+        campo.value = campo.value.replace(/\D/g, "");
+      });
+    }
+  }
+
+  if (tabelaFuncionarios) {
+    tabelaFuncionarios.addEventListener("click", function (e) {
+      const acao = e.target.getAttribute("data-acao");
+      const f = funcionarios.find(x => x.matricula === e.target.getAttribute("data-id"));
+      if (!acao || !f) return;
+
+      if (acao === "ativar-funcionario") {
+        f.ativo = !f.ativo;
+        gravarLista(CH_FUNCIONARIOS, funcionarios);
+        mostrarFuncionarios();
+      }
+      if (acao === "redefinir-pin") {
+        pedirNovoPin(f);
+      }
+    });
+  }
+  document.querySelector("[data-action='salvar-funcionario']").addEventListener("click", salvarFuncionario);
+
   // MEU PERFIL
-  // =====================================================================
   const perfilNome = document.getElementById("perfil-nome");
   const perfilLogin = document.getElementById("perfil-login");
   const perfilCargo = document.getElementById("perfil-cargo");
@@ -1470,6 +1495,12 @@ function telaPermitida(nome) {
   function alterarSenha() {
     const u = usuarioLogado;
     if (!u) return;
+
+    // No modo servidor a senha fica no back-end; aqui ainda não há rota para trocá-la
+    if (USAR_SERVIDOR) {
+      mensagemPerfil("A troca de senha pelo servidor ainda não está disponível.", "warning");
+      return;
+    }
 
     const atual = senhaAtual.value.trim();
     const nova = senhaNova.value.trim();
@@ -1508,9 +1539,16 @@ function telaPermitida(nome) {
     link.addEventListener("click", mostrarPerfil);
   });
 
-  // =====================================================================
   // INICIALIZAÇÃO
-  // =====================================================================
+
+  // cancela e libera os itens
+  empenhos.forEach(e => {
+    if (e.status === "Pendente") {
+      e.status = "Cancelado";
+      e.itens.forEach(i => (i.situacao = "Cancelado"));
+    }
+  });
+
   atualizarTudo();
 
 });

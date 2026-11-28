@@ -9,7 +9,7 @@
 </head>
 <body class="bg-body-tertiary">
 
-<!-- ================= LOGIN ================= -->
+<!-- LOGIN -->
 <div id="login" class="container py-5" style="max-width: 400px">
   <div class="card shadow-sm">
     <div class="card-body p-4">
@@ -29,7 +29,7 @@
   </div>
 </div>
 
-<!-- ================= SISTEMA ================= -->
+<!-- SISTEMA -->
 <div id="app" hidden>
 
   <nav class="navbar navbar-expand-lg bg-body border-bottom">
@@ -48,6 +48,7 @@
           <li class="nav-item"><a href="#" class="nav-link" data-go="gerenciar">Gerenciar Materiais</a></li>
           <li class="nav-item"><a href="#" class="nav-link" data-go="perfil">Meu Perfil</a></li>
           <li class="nav-item" id="menu-usuarios" hidden><a href="#" class="nav-link" data-go="usuarios">Usuários</a></li>
+          <li class="nav-item" id="menu-funcionarios" hidden><a href="#" class="nav-link" data-go="funcionarios">Funcionários</a></li>
         </ul>
         <span class="navbar-text me-3 text-end"><strong id="usuario-nome"></strong> <small id="usuario-perfil"></small></span>
         <button class="btn btn-outline-secondary btn-sm" data-action="sair">Sair</button>
@@ -62,7 +63,7 @@
       <h2 class="h4">Bem-vindo(a), <span id="inicio-nome"></span></h2>
 
       <!-- Administrador do sistema só vê este aviso -->
-      <p id="inicio-aviso" class="text-body-secondary" hidden>Use o menu <strong>Usuários</strong> para gerenciar as contas de acesso.</p>
+      <p id="inicio-aviso" class="text-body-secondary" hidden>Use o menu <strong>Usuários</strong> para gerenciar as contas de acesso e o menu <strong>Funcionários</strong> para cadastrar matrícula e PIN de quem retira material.</p>
 
       <div id="painel">
         <p class="text-body-secondary">Painel de conferência do almoxarifado.</p>
@@ -104,14 +105,12 @@
       <div id="registrar-msg" class="mb-3"></div>
       <ul class="nav nav-tabs mb-3">
         <li class="nav-item"><button class="nav-link active" data-aba="reg-empenho">Novo empenho</button></li>
-        <li class="nav-item"><button class="nav-link" data-aba="reg-pendentes">Empenhos pendentes</button></li>
         <li class="nav-item"><button class="nav-link" data-aba="reg-devolucao">Devolução</button></li>
       </ul>
 
       <!-- Aba novo empenho -->
       <div id="reg-empenho" class="aba">
         <div class="row g-2 mb-3">
-          <div class="col-md-4"><label class="form-label" for="emp-recebedor">Recebedor</label><select id="emp-recebedor" class="form-select"></select></div>
           <div class="col-md-4"><label class="form-label" for="emp-equipe">Equipe</label><select id="emp-equipe" class="form-select"></select></div>
         </div>
         <div class="row g-2 mb-2">
@@ -119,14 +118,19 @@
           <div class="col-md-4 d-flex align-items-end"><button class="btn btn-secondary w-100" data-action="add-item-empenho">Adicionar item</button></div>
         </div>
         <ul class="list-group mb-3" id="emp-lista"></ul>
-        <p id="emp-erro" class="text-danger small"></p>
-        <button class="btn btn-primary" data-action="criar-empenho">Criar empenho</button>
-      </div>
 
-      <!-- Aba empenhos pendentes -->
-      <div id="reg-pendentes" class="aba" hidden>
-        <p class="text-body-secondary">Para confirmar, o recebedor informa matrícula e senha.</p>
-        <div class="table-responsive"><table class="table align-middle" id="tabela-pendentes"></table></div>
+        <!-- Identificação do funcionário que está retirando o material -->
+        <div class="card mb-3" style="max-width: 520px">
+          <div class="card-body">
+            <h3 class="h6">Identificação do funcionário</h3>
+            <div class="row g-2">
+              <div class="col-md-6"><label class="form-label" for="emp-matricula">Matrícula</label><input id="emp-matricula" class="form-control" autocomplete="off"></div>
+              <div class="col-md-6"><label class="form-label" for="emp-pin">PIN</label><input id="emp-pin" type="password" inputmode="numeric" maxlength="6" class="form-control" autocomplete="new-password"></div>
+            </div>
+          </div>
+        </div>
+        <p id="emp-erro" class="text-danger small"></p>
+        <button class="btn btn-primary" data-action="criar-empenho">Identificar e liberar material</button>
       </div>
 
       <!-- Aba devolução -->
@@ -134,8 +138,19 @@
         <label class="form-label" for="dev-empenho">Empenho com itens pendentes</label>
         <select id="dev-empenho" class="form-select mb-3"></select>
         <div id="dev-itens" class="mb-3"></div>
+
+        <!-- Identificação do funcionário que está devolvendo o material -->
+        <div class="card mb-3" style="max-width: 520px">
+          <div class="card-body">
+            <h3 class="h6">Identificação do funcionário</h3>
+            <div class="row g-2">
+              <div class="col-md-6"><label class="form-label" for="dev-matricula">Matrícula</label><input id="dev-matricula" class="form-control" autocomplete="off"></div>
+              <div class="col-md-6"><label class="form-label" for="dev-pin">PIN</label><input id="dev-pin" type="password" inputmode="numeric" maxlength="6" class="form-control" autocomplete="new-password"></div>
+            </div>
+          </div>
+        </div>
         <p id="dev-erro" class="text-danger small"></p>
-        <button class="btn btn-primary" data-action="registrar-devolucao">Registrar devolução</button>
+        <button class="btn btn-primary" data-action="registrar-devolucao">Identificar e registrar devolução</button>
       </div>
     </section>
 
@@ -175,13 +190,12 @@
       <div class="table-responsive"><table class="table table-sm" id="tabela-relatorio"></table></div>
     </section>
 
-    <!-- GERENCIAR MATERIAIS (só administrador de estoque) -->
+    <!-- GERENCIAR MATERIAIS só administrador de estoque ve -->
     <section id="tela-gerenciar" class="tela" hidden>
       <h2 class="h4">Gerenciar Materiais</h2>
       <ul class="nav nav-tabs mb-3">
         <li class="nav-item"><button class="nav-link active" data-aba="ger-materiais">Materiais</button></li>
         <li class="nav-item"><button class="nav-link" data-aba="ger-itens">Itens</button></li>
-        <li class="nav-item"><button class="nav-link" data-aba="ger-recebedores">Recebedores</button></li>
         <li class="nav-item"><button class="nav-link" data-aba="ger-equipes">Equipes</button></li>
         <li class="nav-item"><button class="nav-link" data-aba="ger-extravios">Extravios</button></li>
       </ul>
@@ -199,7 +213,7 @@
         <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-gerenciar-materiais"></table></div>
       </div>
 
-      <!-- Aba itens (cadastrar com patrimônio, inativar, liberar) -->
+      <!-- Aba itens cadastrar com patrimônio, inativar, liberar -->
       <div id="ger-itens" class="aba" hidden>
         <div class="row g-2 mb-3">
           <div class="col-md-4"><select id="item-material" class="form-select"></select></div>
@@ -208,18 +222,6 @@
         </div>
         <p id="item-erro" class="text-danger small"></p>
         <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-gerenciar-itens"></table></div>
-      </div>
-
-      <!-- Aba recebedores (matrícula e senha) -->
-      <div id="ger-recebedores" class="aba" hidden>
-        <div class="row g-2 mb-3">
-          <div class="col-md-3"><input id="rec-nome" class="form-control" placeholder="Nome"></div>
-          <div class="col-md-3"><input id="rec-matricula" class="form-control" placeholder="Matrícula"></div>
-          <div class="col-md-3"><input id="rec-senha" type="password" class="form-control" placeholder="Senha" autocomplete="new-password"></div>
-          <div class="col-md-3"><button class="btn btn-primary" data-action="salvar-recebedor">Cadastrar recebedor</button></div>
-        </div>
-        <p id="rec-erro" class="text-danger small"></p>
-        <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-recebedores"></table></div>
       </div>
 
       <!-- Aba equipes -->
@@ -256,7 +258,7 @@
       </div>
     </section>
 
-    <!-- USUÁRIOS (só Adm do Sistema) -->
+    <!-- USUÁRIOS só Adm do Sistema ve -->
     <section id="tela-usuarios" class="tela" hidden>
       <h2 class="h4">Usuários</h2>
       <p class="text-body-secondary">Cadastre as contas que podem fazer login no sistema.</p>
@@ -276,10 +278,24 @@
       <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-usuarios"></table></div>
     </section>
 
+    <!-- FUNCIONÁRIOS só  Adm do Sistema ve) -->
+    <section id="tela-funcionarios" class="tela" hidden>
+      <h2 class="h4">Funcionários</h2>
+      <p class="text-body-secondary">Cadastre a matrícula e o PIN de quem retira material. O funcionário informa os dois ao registrar um empenho ou uma devolução.</p>
+      <div class="row g-2 mb-3">
+        <div class="col-md-4"><input id="func-nome" class="form-control" placeholder="Nome do funcionário"></div>
+        <div class="col-md-3"><input id="func-matricula" class="form-control" placeholder="Matrícula" autocomplete="off"></div>
+        <div class="col-md-3"><input id="func-pin" type="password" inputmode="numeric" maxlength="6" class="form-control" placeholder="PIN (4 a 6 números)" autocomplete="new-password"></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" data-action="salvar-funcionario">Cadastrar</button></div>
+      </div>
+      <p id="func-erro" class="small"></p>
+      <div class="table-responsive"><table class="table table-sm align-middle" id="tabela-funcionarios"></table></div>
+    </section>
+
   </main>
 </div>
 
-<!-- Janela para mensagens, detalhes e confirmação do recebedor -->
+<!-- Janela para mensagens -->
 <div class="modal fade" id="modal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
